@@ -745,28 +745,7 @@ function card(w,byWalk,now){
   if(w.mood){const p2=document.createElement("span");p2.className="pill mood";p2.textContent=w.mood;top.append(p2)}
   if(w.hidden){const p3=document.createElement("span");p3.className="pill warn";p3.textContent="скрыта после жалоб";top.append(p3)}
   const place=document.createElement("div"); place.className="place"; place.textContent=w.place||"Точка на карте";
-  const km=(w.duration/60*4.5).toFixed(1).replace(".",",");
-  const steps=Math.round(w.duration*110/100)*100;
-  const meta=document.createElement("div"); meta.className="meta";
-  meta.textContent="Прогулка: "+w.duration+" мин · ≈ "+km+" км · ~"+steps.toLocaleString("ru-RU")+" шагов";
-  b.append(top,place,meta);
-  if(myLoc&&hasPt(w)){
-    const way=document.createElement("div"); way.className="way";
-    const isSel=w.id===selectedId, r=isSel?routeFor(w):null;
-    if(r&&r.ok){
-      way.textContent="🚶 До встречи "+fmtDist(r.m)+" пешком · ~"+fmtMins(r.s/60);
-      const leave=w.startAt-r.s*1000-5*60000;
-      if(!statusOf(w,now).live&&leave>now&&leave-now<12*3600000){
-        const lv=document.createElement("div"); lv.className="leave";
-        lv.textContent=leave-now<10*60000?"Пора выходить, чтобы успеть к "+fmtTime(w.startAt):"Выходи в "+fmtTime(leave)+", чтобы прийти чуть заранее";
-        way.append(lv);
-      }
-    } else {
-      const m=L.latLng(myLoc).distanceTo([w.lat,w.lng]);
-      way.textContent="📍 До встречи "+fmtDist(m)+" по прямой"+(isSel&&r&&r.loading?" · считаем маршрут…":"");
-    }
-    b.append(way);
-  }
+  b.append(top,place);
   if(w.note){const x=document.createElement("div");x.className="wnote";x.textContent=w.note;b.append(x)}
   if(Array.isArray(w.route)&&w.route.length){const ol=document.createElement("ol");ol.className="route";w.route.slice(0,6).forEach(s=>{const x=document.createElement("li");x.textContent=String(s);ol.append(x)});b.append(ol)}
   if(selectedId){const tk=document.createElement("div");tk.className="task";tk.textContent="Задание прогулки: "+TASKS[hashIdx(w.id,TASKS.length)];b.append(tk)}
@@ -814,24 +793,7 @@ function showNearbyWalks(){
   map.fitBounds(L.latLngBounds(pts),{paddingTopLeft:[40,100],paddingBottomRight:[40,sheetH+40],maxZoom:16,animate:false});
 }
 
-// ---------- distance to the meeting point ----------
-const fmtDist=m=>m<1000?Math.max(10,Math.round(m/10)*10)+" м":(m/1000).toFixed(1).replace(".",",")+" км";
-const fmtMins=min=>{min=Math.max(1,Math.round(min));return min<60?min+" мин":Math.floor(min/60)+" ч"+(min%60?" "+min%60+" мин":"")};
-const routes={};
-// Real walking route along streets (OpenStreetMap foot routing); falls back to straight distance if unavailable
-function routeFor(w){
-  const key=w.id+"|"+myLoc[0].toFixed(3)+","+myLoc[1].toFixed(3)+"|"+w.lat.toFixed(5)+","+w.lng.toFixed(5);
-  if(routes[key]) return routes[key];
-  const r=routes[key]={loading:true};
-  const straight=L.latLng(myLoc).distanceTo([w.lat,w.lng]);
-  if(straight>40000){r.loading=false;return r}
-  fetch("https://routing.openstreetmap.de/routed-foot/route/v1/driving/"+myLoc[1]+","+myLoc[0]+";"+w.lng+","+w.lat+"?overview=false")
-    .then(x=>x.json()).then(j=>{
-      const rt=j&&j.routes&&j.routes[0];
-      if(rt&&isFinite(rt.distance)){r.ok=true;r.m=rt.distance;r.s=Math.max(rt.duration,rt.distance/1.25)}
-    }).catch(()=>{}).finally(()=>{r.loading=false;render()});
-  return r;
-}
+// ---------- my location ----------
 // Keep "where am I" fresh while the app is open
 let watchId=null,lastLocRender=0;
 function watchMe(){
