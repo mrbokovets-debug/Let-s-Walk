@@ -525,8 +525,14 @@ const fmtTime=ms=>{const d=new Date(ms);return pad(d.getHours())+":"+pad(d.getMi
 const WD=["вс","пн","вт","ср","чт","пт","сб"];
 function dayLabel(ms){const d=new Date(ms),n=new Date();const diff=Math.round((new Date(d.getFullYear(),d.getMonth(),d.getDate())-new Date(n.getFullYear(),n.getMonth(),n.getDate()))/86400000);if(diff===0)return"сегодня";if(diff===1)return"завтра";if(diff===2)return"послезавтра";return WD[d.getDay()]+", "+d.toLocaleDateString("ru-RU",{day:"numeric",month:"short"}).replace(".","")}
 const DAYS_AHEAD=14;
-// A walk ends when its author taps "Завершить", or by itself this long after the start
+// A walk ends when its author taps "Завершить". Safety net if they forget:
+// it disappears at midnight of its day (but never sooner than 3 hours after the start).
 const AUTO_END_MIN=180;
+function walkEnd(w){
+  if(w.endedAt) return w.endedAt;
+  const d=new Date(w.startAt); const midnight=new Date(d.getFullYear(),d.getMonth(),d.getDate()+1).getTime();
+  return Math.max(midnight,w.startAt+AUTO_END_MIN*60000);
+}
 function buildDays(keep){
   const box=$("dayChips"); const prev=keep?document.querySelector('input[name="day"]:checked')?.value:null;
   box.innerHTML=""; const n=new Date();
@@ -544,7 +550,7 @@ function buildDays(keep){
 }
 buildDays(false);
 function plural(n,a,b,c){n=Math.abs(n)%100;const n1=n%10;if(n>10&&n<20)return c;if(n1>1&&n1<5)return b;if(n1===1)return a;return c}
-function statusOf(w,now){const end=w.startAt+w.duration*60000;if(now>=w.startAt&&now<end)return{live:true,text:"идёт сейчас"};const m=Math.round((w.startAt-now)/60000);if(m<60)return{live:false,text:"через "+m+" "+plural(m,"минуту","минуты","минут")};const h=Math.floor(m/60),mm=m%60;if(h<24)return{live:false,text:"через "+h+" ч"+(mm?" "+mm+" мин":"")};return{live:false,text:dayLabel(w.startAt)}}
+function statusOf(w,now){const end=walkEnd(w);if(now>=w.startAt&&now<end)return{live:true,text:"идёт сейчас"};const m=Math.round((w.startAt-now)/60000);if(m<60)return{live:false,text:"через "+m+" "+plural(m,"минуту","минуты","минут")};const h=Math.floor(m/60),mm=m%60;if(h<24)return{live:false,text:"через "+h+" ч"+(mm?" "+mm+" мин":"")};return{live:false,text:dayLabel(w.startAt)}}
 function hashIdx(s,n){let h=0;for(const c of s)h=(h*31+c.charCodeAt(0))>>>0;return h%n}
 function defaultTime(){const d=new Date(Date.now()+30*60000);d.setMinutes(Math.ceil(d.getMinutes()/15)*15,0,0);return pad(d.getHours())+":"+pad(d.getMinutes())}
 const hasPt=w=>typeof w.lat==="number"&&typeof w.lng==="number";
@@ -637,7 +643,7 @@ $("pickGo").onclick=openForm;
 // ---------- render ----------
 async function render(){
   const now=Date.now();
-  const upcoming=walks.filter(w=>!w.endedAt&&w.startAt+w.duration*60000>now&&!(blocked.has(w.authorId)&&w.authorId!==myId)).sort((a,b)=>a.startAt-b.startAt);
+  const upcoming=walks.filter(w=>!w.endedAt&&walkEnd(w)>now&&!(blocked.has(w.authorId)&&w.authorId!==myId)).sort((a,b)=>a.startAt-b.startAt);
   const byWalk={}; joins.forEach(j=>{(byWalk[j.walkId]=byWalk[j.walkId]||[]).push(j.userId)});
   if(selectedId&&!upcoming.some(w=>w.id===selectedId)){selectedId=null;setHash(null)}
 
@@ -854,7 +860,7 @@ let hashHandled=false;
 function openFromHash(){
   const m=/^#w-([0-9a-f-]{36})$/i.exec(location.hash||""); if(!m) return;
   const w=walks.find(x=>x.id===m[1]);
-  if(!w||w.startAt+w.duration*60000<Date.now()){toast("Эта прогулка уже закончилась или её отменили");setHash(null);return}
+  if(!w||w.endedAt||walkEnd(w)<Date.now()){toast("Эта прогулка уже закончилась или её отменили");setHash(null);return}
   openDetail(w.id,true);
 }
 window.addEventListener("hashchange",openFromHash);
@@ -940,7 +946,7 @@ function card(w,byWalk,now){
 // Fit the map so every upcoming walk nearby is on screen (and you, if we know where you are)
 function showNearbyWalks(){
   const now=Date.now(), c=map.getCenter();
-  const pts=walks.filter(w=>hasPt(w)&&w.startAt+w.duration*60000>now&&!blocked.has(w.authorId))
+  const pts=walks.filter(w=>hasPt(w)&&!w.endedAt&&walkEnd(w)>now&&!blocked.has(w.authorId))
     .map(w=>L.latLng(w.lat,w.lng)).filter(p=>p.distanceTo(c)<25000);
   if(!pts.length) return;
   if(myLoc) pts.push(L.latLng(myLoc));
@@ -1091,7 +1097,7 @@ async function reload(){
   if(loading){reloadAgain=true;return}
   loading=true;
   try{
-    const since=new Date(Date.now()-(AUTO_END_MIN+60)*60000).toISOString();
+    const since=new Date(Date.now()-27*3600000).toISOString();
     const {data:ws,error:e1}=await sb.from("walks").select("*").gte("start_at",since).order("start_at").limit(500);
     if(e1) throw e1;
     walks=(ws||[]).map(r=>({id:r.id,authorId:r.author_id,place:r.place,lat:r.lat,lng:r.lng,startAt:Date.parse(r.start_at),duration:AUTO_END_MIN,endedAt:r.ended_at?Date.parse(r.ended_at):null,mood:r.mood,note:r.note,route:r.route,hidden:!!r.hidden,taskSeed:r.task_seed||0,taskDoneAt:r.task_done_at?Date.parse(r.task_done_at):null,taskDoneBy:r.task_done_by||null}));
@@ -1208,7 +1214,7 @@ $("walkForm").addEventListener("submit",async ev=>{
   if(!pt){showErr("Сначала выбери место на карте.");return}
   if(!f.place){showErr("Напиши, где встречаемся.");$("place").focus();return}
   if(!f.startAt){showErr("Укажи время.");$("time").focus();return}
-  if(f.startAt+f.duration*60000<Date.now()){showErr("Это время уже прошло. Выбери время позже или другой день.");return}
+  if(f.startAt<Date.now()-5*60000){showErr("Это время уже прошло. Выбери время позже или другой день.");return}
   if(!myId){showErr("Сначала войди.");return}
   const btn=$("publishBtn"); btn.disabled=true;
   const row={place:f.place,lat:pt.lat,lng:pt.lng,start_at:new Date(f.startAt).toISOString(),duration_min:DEFAULT_DURATION,mood:f.mood||null,note:f.note||null};

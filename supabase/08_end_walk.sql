@@ -1,5 +1,5 @@
 -- Let's Walk — завершение прогулки
--- Автор завершает прогулку кнопкой; без этого она завершается сама через 3 часа после начала.
+-- Автор завершает прогулку кнопкой; если забыл, она пропадает в полночь своего дня (но не раньше 3 часов после начала).
 -- Запускать можно повторно.
 
 alter table public.walks add column if not exists ended_at timestamptz;
@@ -30,7 +30,7 @@ create policy "joins insert own" on public.walk_participants
     and not exists (select 1 from public.walks w where w.id = walk_id and w.ended_at is not null)
   );
 
--- «Выполнили!»: с начала прогулки и до 30 минут после её завершения (или 3 часов после начала)
+-- «Выполнили!»: с начала прогулки и до 30 минут после её завершения (или полуночи её дня)
 create or replace function public.mark_task_done(w uuid)
 returns void language plpgsql security definer set search_path = public as $$
 declare
@@ -46,7 +46,7 @@ begin
   if now() < s then
     raise exception 'Отметить задание можно, когда начнётся прогулка';
   end if;
-  if now() > coalesce(e, s + interval '3 hours') + interval '30 minutes' then
+  if now() > coalesce(e, greatest(date_trunc('day', s at time zone 'Europe/Madrid') at time zone 'Europe/Madrid' + interval '1 day', s + interval '3 hours')) + interval '30 minutes' then
     raise exception 'Прогулка уже закончилась';
   end if;
   update public.walks
