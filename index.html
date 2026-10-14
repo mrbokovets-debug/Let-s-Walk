@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1">
 <meta name="theme-color" content="#1E6B4E">
 <title>Let's Walk</title>
+<meta name="description" content="Пошли гулять! Смотри на карте, кто зовёт прогуляться рядом, и присоединяйся.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Let's Walk">
+<meta property="og:title" content="Пошли гулять! · Let's Walk">
+<meta property="og:description" content="Тебя зовут на прогулку. Открой, чтобы посмотреть где и когда, и присоединиться.">
+<meta property="og:image" content="https://mrbokovets-debug.github.io/Let-s-Walk/assets/logo/icon-512.png">
+<meta property="og:url" content="https://mrbokovets-debug.github.io/Let-s-Walk/">
+<meta name="twitter:card" content="summary">
 <link rel="icon" type="image/png" sizes="192x192" href="assets/logo/icon-192.png">
 <link rel="apple-touch-icon" href="assets/logo/icon-180.png">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
@@ -113,6 +121,9 @@ button{cursor:pointer}
 .join{border:0;border-radius:999px;padding:9px 15px;font-weight:600;background:var(--leaf);color:var(--leaf-ink)}
 .join.on{background:transparent;color:var(--leaf);box-shadow:inset 0 0 0 1.5px var(--leaf)}
 .small{border:0;background:transparent;color:var(--leaf);font-weight:600;padding:9px 4px}
+.share{border:0;border-radius:999px;padding:9px 14px;font-weight:600;background:var(--sun);color:var(--sun-ink);display:inline-flex;align-items:center;gap:6px}
+.copybox{display:flex;flex-direction:column;gap:10px}
+.copybox textarea{font-size:14px;min-height:96px}
 .cancel{border:0;background:transparent;color:var(--danger);font-weight:500;padding:9px 4px}
 .cancel.confirm{background:var(--danger);color:#fff;border-radius:999px;padding:9px 14px}
 
@@ -301,6 +312,15 @@ textarea.input{resize:vertical;min-height:60px}
   </form>
 </div>
 
+<div class="modal" id="copyModal" hidden>
+  <div class="form copybox">
+    <h2>Позвать друзей</h2>
+    <p class="lead">Скопируй этот текст и отправь друзьям в любой чат.</p>
+    <textarea class="input" id="copyText" readonly></textarea>
+    <div class="row"><button class="ghost" type="button" id="copyClose">Готово</button></div>
+  </div>
+</div>
+
 <div class="toast" id="toast" hidden></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -422,9 +442,9 @@ function layoutSheet(){
   $("backAll").hidden=!selectedId;
   requestAnimationFrame(()=>document.documentElement.style.setProperty("--sheet-h",$("sheet").offsetHeight+"px"));
 }
-function toggleSheet(){if(pick)return;if(selectedId){selectedId=null;expanded=true}else expanded=!expanded;layoutSheet();render()}
+function toggleSheet(){if(pick)return;if(selectedId){selectedId=null;setHash(null);expanded=true}else expanded=!expanded;layoutSheet();render()}
 $("handle").onclick=toggleSheet; $("titleBtn").onclick=toggleSheet;
-$("backAll").onclick=()=>{selectedId=null;expanded=true;layoutSheet();render()};
+$("backAll").onclick=()=>{selectedId=null;setHash(null);expanded=true;layoutSheet();render()};
 $("goBtn").onclick=()=>{
   const go=()=>{const c=myLoc&&map.getBounds().contains(myLoc)?L.latLng(myLoc):map.getCenter();setPick(c);toast("Выбери место встречи на карте")};
   if(requireAuth(go,"Войди, чтобы позвать гулять")) go();
@@ -462,8 +482,37 @@ async function render(){
   shown.forEach(w=>list.append(card(w,byWalk,now)));
   layoutSheet();
 }
+// ---------- share ----------
+const SITE_URL="https://mrbokovets-debug.github.io/Let-s-Walk/";
+const walkUrl=id=>SITE_URL+"#w-"+id;
+function shareText(w){
+  const dl=dayLabel(w.startAt);
+  return "Пошли гулять! "+(w.place||"Точка на карте")+", "+dl+" в "+fmtTime(w.startAt)+", "+w.duration+" мин"+(w.mood?" · "+w.mood:"")+". Присоединяйся:";
+}
+async function shareWalk(w){
+  const url=walkUrl(w.id), text=shareText(w);
+  if(navigator.share){
+    try{await navigator.share({title:"Let's Walk",text,url});return}
+    catch(e){if(e&&e.name==="AbortError")return}
+  }
+  const full=text+" "+url;
+  try{await navigator.clipboard.writeText(full);toast("Ссылка скопирована. Вставь её в чат с друзьями.");return}catch(e){}
+  $("copyText").value=full; $("copyModal").hidden=false; $("copyText").focus(); $("copyText").select();
+}
+function setHash(id){try{history.replaceState(null,"",id?"#w-"+id:location.pathname+location.search)}catch(e){}}
+let hashHandled=false;
+function openFromHash(){
+  const m=/^#w-([0-9a-f-]{36})$/i.exec(location.hash||""); if(!m) return;
+  const w=walks.find(x=>x.id===m[1]);
+  if(!w||w.startAt+w.duration*60000<Date.now()){toast("Эта прогулка уже закончилась или её отменили");setHash(null);return}
+  openDetail(w.id); if(hasPt(w)) map.setView([w.lat,w.lng],16);
+}
+window.addEventListener("hashchange",openFromHash);
+$("copyClose").onclick=()=>$("copyModal").hidden=true;
+$("copyModal").addEventListener("click",e=>{if(e.target===$("copyModal"))$("copyModal").hidden=true});
+
 function openDetail(id){
-  clearPick(); selectedId=id; layoutSheet(); render();
+  clearPick(); selectedId=id; setHash(id); layoutSheet(); render();
   const w=walks.find(x=>x.id===id);
   if(w&&hasPt(w)) map.panTo([w.lat,w.lng],{animate:true});
 }
@@ -500,6 +549,9 @@ function card(w,byWalk,now){
   const act=document.createElement("div"); act.className="wact";
   const iJoined=!!myId&&(byWalk[w.id]||[]).includes(myId);
   if(w.authorId!==myId){const j=document.createElement("button");j.type="button";j.className="join"+(iJoined?" on":"");j.textContent=iJoined?"Я не смогу":"Я с вами";j.onclick=()=>{if(requireAuth(null,"Войди, чтобы присоединиться"))toggleJoin(w,iJoined,j)};act.append(j)}
+  {const sh=document.createElement("button");sh.type="button";sh.className="share";sh.setAttribute("aria-label","Позвать друзей на эту прогулку");
+   sh.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+   sh.append(document.createTextNode("Позвать друзей"));sh.onclick=()=>shareWalk(w);act.append(sh)}
   if(!selectedId&&hasPt(w)){const s=document.createElement("button");s.type="button";s.className="small";s.textContent="На карте";s.onclick=()=>{openDetail(w.id);map.flyTo([w.lat,w.lng],16,{duration:.6})};act.append(s)}
   if(myId&&w.authorId===myId){
     const conf=confirming.has(w.id);
@@ -567,7 +619,7 @@ async function toggleJoin(w,iJoined,btn){
 async function cancelWalk(w){
   if(!confirming.has(w.id)){confirming.add(w.id);render();return}
   confirming.delete(w.id);
-  try{const {error}=await sb.from("walks").delete().eq("id",w.id);if(error)throw error;selectedId=null;toast("Прогулка отменена");await reload()}catch(e){toast(errText(e))}
+  try{const {error}=await sb.from("walks").delete().eq("id",w.id);if(error)throw error;selectedId=null;setHash(null);toast("Прогулка отменена");await reload()}catch(e){toast(errText(e))}
 }
 
 // ---------- create walk ----------
@@ -603,8 +655,9 @@ $("walkForm").addEventListener("submit",async ev=>{
     if(error) throw error;
     $("walkForm").reset(); buildDays(false); $("dur45").checked=true; $("mood0").checked=true; $("time").value="";
     closeForm(); clearPick();
-    if(data&&data.id) selectedId=data.id;
-    await reload(); toast("Готово! Твоя прогулка на карте.");
+    await reload();
+    if(data&&data.id) openDetail(data.id);
+    toast("Готово! Теперь нажми «Позвать друзей».");
   }catch(e){showErr(errText(e))}
   btn.disabled=false;
 });
@@ -711,6 +764,7 @@ function getStartCenter(){
   await applySession(s);
   sb.auth.onAuthStateChange((evt,s2)=>{if(evt==="TOKEN_REFRESHED")session=s2});
   await reload();
+  openFromHash();
   subscribeLive();
   document.addEventListener("visibilitychange",()=>{if(!document.hidden)reload()});
 })();
