@@ -107,6 +107,11 @@ button{cursor:pointer}
 .walk{background:var(--bg);border-radius:16px;display:grid;grid-template-columns:70px 1fr;overflow:hidden}
 .walk.sel{box-shadow:inset 0 0 0 2px var(--leaf)}
 .walk.mine .stub{background:var(--sun-soft)}
+.end-btn{border:0;border-radius:999px;padding:9px 15px;font-weight:600;background:var(--ink);color:var(--bg)}
+.summary{display:flex;flex-direction:column;gap:12px;text-align:center;align-items:center}
+.summary .big{font-size:44px;line-height:1}
+.summary .avs img{width:40px;height:40px}
+.summary .facts{display:flex;flex-direction:column;gap:6px;font-size:15px;width:100%;text-align:left;background:var(--bg);border-radius:14px;padding:12px}
 .way{font-size:13px;color:var(--ink);font-variant-numeric:tabular-nums;display:flex;flex-direction:column;gap:2px}
 .leave{font-weight:600;color:var(--leaf)}
 .list-head{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:6px 2px 0}
@@ -429,6 +434,20 @@ textarea.input{resize:vertical;min-height:60px}
   </form>
 </div>
 
+<div class="modal" id="sumModal" hidden>
+  <div class="form summary" role="dialog" aria-labelledby="sumTitle">
+    <div class="big" aria-hidden="true">🏁</div>
+    <h2 id="sumTitle">Прогулка завершена</h2>
+    <p class="lead" id="sumPlace"></p>
+    <span class="avs" id="sumAvs"></span>
+    <div class="facts" id="sumFacts"></div>
+    <div class="row" style="justify-content:center">
+      <button class="primary" type="button" id="sumAgain">Погулять ещё раз</button>
+      <button class="ghost" type="button" id="sumClose">Спасибо!</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal" id="copyModal" hidden>
   <div class="form copybox">
     <h2>Позвать друзей</h2>
@@ -506,6 +525,8 @@ const fmtTime=ms=>{const d=new Date(ms);return pad(d.getHours())+":"+pad(d.getMi
 const WD=["вс","пн","вт","ср","чт","пт","сб"];
 function dayLabel(ms){const d=new Date(ms),n=new Date();const diff=Math.round((new Date(d.getFullYear(),d.getMonth(),d.getDate())-new Date(n.getFullYear(),n.getMonth(),n.getDate()))/86400000);if(diff===0)return"сегодня";if(diff===1)return"завтра";if(diff===2)return"послезавтра";return WD[d.getDay()]+", "+d.toLocaleDateString("ru-RU",{day:"numeric",month:"short"}).replace(".","")}
 const DAYS_AHEAD=14;
+// A walk ends when its author taps "Завершить", or by itself this long after the start
+const AUTO_END_MIN=180;
 function buildDays(keep){
   const box=$("dayChips"); const prev=keep?document.querySelector('input[name="day"]:checked')?.value:null;
   box.innerHTML=""; const n=new Date();
@@ -616,7 +637,7 @@ $("pickGo").onclick=openForm;
 // ---------- render ----------
 async function render(){
   const now=Date.now();
-  const upcoming=walks.filter(w=>w.startAt+w.duration*60000>now&&!(blocked.has(w.authorId)&&w.authorId!==myId)).sort((a,b)=>a.startAt-b.startAt);
+  const upcoming=walks.filter(w=>!w.endedAt&&w.startAt+w.duration*60000>now&&!(blocked.has(w.authorId)&&w.authorId!==myId)).sort((a,b)=>a.startAt-b.startAt);
   const byWalk={}; joins.forEach(j=>{(byWalk[j.walkId]=byWalk[j.walkId]||[]).push(j.userId)});
   if(selectedId&&!upcoming.some(w=>w.id===selectedId)){selectedId=null;setHash(null)}
 
@@ -883,12 +904,22 @@ function card(w,byWalk,now){
   people.append(avs,names_); b.append(people);
   const act=document.createElement("div"); act.className="wact";
   const iJoined=!!myId&&(byWalk[w.id]||[]).includes(myId);
-  if(w.authorId!==myId){const j=document.createElement("button");j.type="button";j.className="join"+(iJoined?" on":"");j.textContent=iJoined?"Я не смогу":"Я с вами";j.onclick=()=>{if(requireAuth(null,"Войди, чтобы присоединиться"))toggleJoin(w,iJoined,j)};act.append(j)}
+  if(w.authorId!==myId){const j=document.createElement("button");j.type="button";j.className="join"+(iJoined?" on":"");j.textContent=iJoined?(now>=w.startAt?"Я ухожу":"Я не смогу"):"Я с вами";j.onclick=()=>{if(requireAuth(null,"Войди, чтобы присоединиться"))toggleJoin(w,iJoined,j)};act.append(j)}
   {const sh=document.createElement("button");sh.type="button";sh.className="share";sh.setAttribute("aria-label","Позвать друзей на эту прогулку");
    sh.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
    sh.append(document.createTextNode("Позвать друзей"));sh.onclick=()=>shareWalk(w);act.append(sh)}
   if(w.authorId!==myId){const mo=document.createElement("button");mo.type="button";mo.className="more";mo.textContent="⋯";mo.setAttribute("aria-label","Пожаловаться или скрыть человека");mo.onclick=()=>openSafety({userId:w.authorId,walkId:w.id});act.append(mo)}
-  if(myId&&w.authorId===myId){
+  if(myId&&w.authorId===myId&&now>=w.startAt-5*60000){
+    // the walk has started: the author can finish it for everyone
+    if(confirmEnd===w.id){
+      const q=document.createElement("span");q.className="names";q.textContent="Завершить для всех?";
+      const y=document.createElement("button");y.type="button";y.className="end-btn";y.textContent="Да, завершить";y.onclick=()=>{confirmEnd=null;endWalk(w,y)};
+      const n=document.createElement("button");n.type="button";n.className="ghost";n.textContent="Нет";n.onclick=()=>{confirmEnd=null;render()};
+      act.append(q,y,n);
+    } else {
+      const e=document.createElement("button");e.type="button";e.className="end-btn";e.textContent="🏁 Завершить прогулку";e.onclick=()=>{confirmEnd=w.id;render()};act.append(e);
+    }
+  } else if(myId&&w.authorId===myId){
     const ed=document.createElement("button");ed.type="button";ed.className="small";ed.textContent="Изменить";ed.onclick=()=>startEdit(w);act.append(ed);
     const conf=confirming.has(w.id);
     const c=document.createElement("button");c.type="button";c.className="cancel"+(conf?" confirm":"");c.textContent=conf?"Точно отменить?":"Отменить";c.onclick=()=>cancelWalk(w);act.append(c);
@@ -935,6 +966,46 @@ document.addEventListener("visibilitychange",()=>{
   if(document.hidden){if(watchId!==null){navigator.geolocation.clearWatch(watchId);watchId=null}}
   else if(myLoc) watchMe();
 });
+
+// ---------- finishing a walk ----------
+let confirmEnd=null, sumWalk=null;
+async function endWalk(w,btn){
+  btn.disabled=true;
+  const {error}=await sb.rpc("end_walk",{w:w.id});
+  btn.disabled=false;
+  if(error){toast(/Could not find|does not exist|schema cache/i.test(error.message||"")?"Обнови базу: запусти 08_end_walk.sql.":errText(error));return}
+  try{await sb.from("walk_messages").insert({walk_id:w.id,user_id:myId,body:"🏁 Прогулка завершена. Спасибо, что погуляли вместе!"})}catch(e){}
+  w.endedAt=Date.now(); selectedId=null; setHash(null);
+  await reload();
+}
+function summarySeen(id,set){let a=[];try{a=JSON.parse(localStorage.getItem("lw-sum")||"[]")}catch(e){}
+  if(set){a=[id,...a.filter(x=>x!==id)].slice(0,50);try{localStorage.setItem("lw-sum",JSON.stringify(a))}catch(e){}}
+  return a.includes(id)}
+// After a walk I took part in has ended, show a short summary once
+function checkEndedWalks(){
+  if(!myId||!$("sumModal").hidden) return;
+  const byWalk={}; joins.forEach(j=>{(byWalk[j.walkId]=byWalk[j.walkId]||[]).push(j.userId)});
+  const w=walks.filter(w=>w.endedAt&&Date.now()-w.endedAt<6*3600000&&(w.authorId===myId||(byWalk[w.id]||[]).includes(myId))&&!summarySeen(w.id))
+    .sort((a,b)=>b.endedAt-a.endedAt)[0];
+  if(!w) return;
+  summarySeen(w.id,true); sumWalk=w;
+  const ppl=[w.authorId,...(byWalk[w.id]||[]).filter(u=>u!==w.authorId)];
+  $("sumPlace").textContent=(w.place||"Прогулка")+" · "+dayLabel(w.startAt)+" в "+fmtTime(w.startAt);
+  const av=$("sumAvs"); av.innerHTML=""; ppl.slice(0,8).forEach(u=>{const im=document.createElement("img");im.alt="";im.src=avatarFor(u,u===myId?myName:names[u]);av.append(im)});
+  const mins=Math.round((w.endedAt-w.startAt)/60000);
+  const f=$("sumFacts"); f.innerHTML="";
+  const line=t=>{const d=document.createElement("div");d.textContent=t;f.append(d)};
+  line("👥 Гуляли вместе: "+ppl.map(u=>u===myId?"ты":(names[u]||"Кто-то")).join(", "));
+  if(mins>0) line("⏱ Длительность: "+(mins<60?mins+" мин":Math.floor(mins/60)+" ч"+(mins%60?" "+mins%60+" мин":"")));
+  line(w.taskDoneAt?"🎯 Задание выполнено ✅":"🎯 Задание: «"+taskOf(w)+"» — в следующий раз!");
+  $("sumModal").hidden=false;
+}
+$("sumClose").onclick=()=>{$("sumModal").hidden=true};
+$("sumAgain").onclick=()=>{
+  $("sumModal").hidden=true; const w=sumWalk; if(!w) return;
+  const go=()=>{map.setView([w.lat,w.lng],16);setPick(L.latLng(w.lat,w.lng));toast("Выбери время, и позовём гулять снова")};
+  if(requireAuth(go,"Войди, чтобы позвать гулять")) go();
+};
 
 // ---------- walk task ----------
 let confirmTask=null;
@@ -1020,10 +1091,10 @@ async function reload(){
   if(loading){reloadAgain=true;return}
   loading=true;
   try{
-    const since=new Date(Date.now()-3*3600000).toISOString();
+    const since=new Date(Date.now()-(AUTO_END_MIN+60)*60000).toISOString();
     const {data:ws,error:e1}=await sb.from("walks").select("*").gte("start_at",since).order("start_at").limit(500);
     if(e1) throw e1;
-    walks=(ws||[]).map(r=>({id:r.id,authorId:r.author_id,place:r.place,lat:r.lat,lng:r.lng,startAt:Date.parse(r.start_at),duration:r.duration_min,mood:r.mood,note:r.note,route:r.route,hidden:!!r.hidden,taskSeed:r.task_seed||0,taskDoneAt:r.task_done_at?Date.parse(r.task_done_at):null,taskDoneBy:r.task_done_by||null}));
+    walks=(ws||[]).map(r=>({id:r.id,authorId:r.author_id,place:r.place,lat:r.lat,lng:r.lng,startAt:Date.parse(r.start_at),duration:AUTO_END_MIN,endedAt:r.ended_at?Date.parse(r.ended_at):null,mood:r.mood,note:r.note,route:r.route,hidden:!!r.hidden,taskSeed:r.task_seed||0,taskDoneAt:r.task_done_at?Date.parse(r.task_done_at):null,taskDoneBy:r.task_done_by||null}));
     const ids=walks.map(w=>w.id);
     joins=[];
     if(ids.length){
@@ -1038,6 +1109,7 @@ async function reload(){
       need.forEach(id=>{if(!(id in names))names[id]=""});
     }
     loaded=true;
+    setTimeout(checkEndedWalks,300);
   }catch(e){loaded=true;toast(errText(e))}
   loading=false;
   render();
@@ -1139,7 +1211,7 @@ $("walkForm").addEventListener("submit",async ev=>{
   if(f.startAt+f.duration*60000<Date.now()){showErr("Это время уже прошло. Выбери время позже или другой день.");return}
   if(!myId){showErr("Сначала войди.");return}
   const btn=$("publishBtn"); btn.disabled=true;
-  const row={place:f.place,lat:pt.lat,lng:pt.lng,start_at:new Date(f.startAt).toISOString(),duration_min:f.duration,mood:f.mood||null,note:f.note||null};
+  const row={place:f.place,lat:pt.lat,lng:pt.lng,start_at:new Date(f.startAt).toISOString(),duration_min:DEFAULT_DURATION,mood:f.mood||null,note:f.note||null};
   try{
     if(editId){
       const id=editId, old=walks.find(x=>x.id===id);
