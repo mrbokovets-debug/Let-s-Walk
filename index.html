@@ -105,6 +105,8 @@ button{cursor:pointer}
 .empty strong{display:block;color:var(--ink);font-weight:600;margin-bottom:2px}
 .walk{background:var(--bg);border-radius:16px;display:grid;grid-template-columns:70px 1fr;overflow:hidden}
 .walk.sel{box-shadow:inset 0 0 0 2px var(--leaf)}
+.walk.tap{cursor:pointer;transition:transform .12s,box-shadow .12s}
+.walk.tap:active{transform:scale(.985);box-shadow:inset 0 0 0 2px var(--leaf)}
 .stub{background:var(--leaf-soft);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:10px 4px;text-align:center}
 .stub .t{font-family:var(--display);font-weight:700;font-size:17px;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
 .stub .d{font-size:12px;color:var(--muted)}
@@ -737,7 +739,6 @@ function card(w,byWalk,now){
   {const sh=document.createElement("button");sh.type="button";sh.className="share";sh.setAttribute("aria-label","Позвать друзей на эту прогулку");
    sh.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
    sh.append(document.createTextNode("Позвать друзей"));sh.onclick=()=>shareWalk(w);act.append(sh)}
-  if(!selectedId&&hasPt(w)){const s=document.createElement("button");s.type="button";s.className="small";s.textContent="На карте";s.onclick=()=>{openDetail(w.id);map.flyTo([w.lat,w.lng],16,{duration:.6})};act.append(s)}
   if(w.authorId!==myId){const mo=document.createElement("button");mo.type="button";mo.className="more";mo.textContent="⋯";mo.setAttribute("aria-label","Пожаловаться или скрыть человека");mo.onclick=()=>openSafety({userId:w.authorId,walkId:w.id});act.append(mo)}
   if(myId&&w.authorId===myId){
     const ed=document.createElement("button");ed.type="button";ed.className="small";ed.textContent="Изменить";ed.onclick=()=>startEdit(w);act.append(ed);
@@ -746,7 +747,15 @@ function card(w,byWalk,now){
     if(conf){const k=document.createElement("button");k.type="button";k.className="ghost";k.textContent="Нет";k.onclick=()=>{confirming.delete(w.id);render()};act.append(k)}
   }
   if(act.childElementCount) b.append(act);
-  li.append(stub,b); return li;
+  li.append(stub,b);
+  // in the list, tapping anywhere on the card (except its buttons) opens the walk on the map
+  if(!selectedId&&hasPt(w)){
+    li.classList.add("tap"); li.tabIndex=0; li.setAttribute("role","button"); li.setAttribute("aria-label","Показать на карте: "+(w.place||"прогулка")+", "+dayLabel(w.startAt)+" в "+fmtTime(w.startAt));
+    const go=()=>{openDetail(w.id);map.flyTo([w.lat,w.lng],16,{duration:.6})};
+    li.addEventListener("click",e=>{if(e.target.closest("button,a,input,textarea"))return;go()});
+    li.addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.target===li){e.preventDefault();go()}});
+  }
+  return li;
 }
 
 // Fit the map so every upcoming walk nearby is on screen (and you, if we know where you are)
