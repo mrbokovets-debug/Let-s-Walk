@@ -835,6 +835,15 @@ document.addEventListener("visibilitychange",()=>{
 });
 
 // ---------- walk task ----------
+let confirmTask=null;
+async function unmarkTask(w,btn){
+  btn.disabled=true;
+  const {error}=await sb.rpc("unmark_task_done",{w:w.id});
+  btn.disabled=false;
+  if(error){toast(/unmark_task_done|function/.test(error.message||"")?"Обнови базу: запусти 05_tasks_time.sql.":errText(error));return}
+  try{await sb.from("walk_messages").insert({walk_id:w.id,user_id:myId,body:"↩️ Отметка «задание выполнено» снята"})}catch(e){}
+  w.taskDoneAt=null; w.taskDoneBy=null; render(); toast("Отметка снята"); reload();
+}
 function taskBlock(w,byWalk,now){
   const member=!!myId&&(w.authorId===myId||(byWalk[w.id]||[]).includes(myId));
   const box=document.createElement("div"); box.className="task"+(w.taskDoneAt?" is-done":"");
@@ -845,9 +854,24 @@ function taskBlock(w,byWalk,now){
     const d=document.createElement("span"); d.className="done";
     d.textContent="✅ Выполнено"+(w.taskDoneBy?(w.taskDoneBy===myId?" · отметил(а) ты":" · отметил(а) "+(names[w.taskDoneBy]||"участник")):"");
     act.append(d);
+    if(myId&&(w.taskDoneBy===myId||w.authorId===myId)){
+      const un=document.createElement("button"); un.type="button"; un.className="small"; un.textContent="Снять отметку";
+      un.onclick=()=>unmarkTask(w,un); act.append(un);
+    }
+  } else if(member&&now<w.startAt){
+    const h=document.createElement("span"); h.className="hint";
+    h.textContent="Отметить можно будет, когда начнётся прогулка ("+dayLabel(w.startAt)+" в "+fmtTime(w.startAt)+")";
+    act.append(h);
+  } else if(member&&confirmTask===w.id){
+    const q=document.createElement("span"); q.className="done"; q.textContent="Точно выполнили?";
+    const yes=document.createElement("button"); yes.type="button"; yes.className="done-btn"; yes.textContent="Да";
+    yes.onclick=()=>{confirmTask=null;markTaskDone(w,yes)};
+    const no=document.createElement("button"); no.type="button"; no.className="ghost"; no.textContent="Нет";
+    no.onclick=()=>{confirmTask=null;render()};
+    act.append(q,yes,no);
   } else if(member){
     const ok=document.createElement("button"); ok.type="button"; ok.className="done-btn"; ok.textContent="Выполнили! ✅";
-    ok.onclick=()=>markTaskDone(w,ok); act.append(ok);
+    ok.onclick=()=>{confirmTask=w.id;render()}; act.append(ok);
   } else {
     const h=document.createElement("span"); h.className="hint"; h.textContent="Присоединяйся, чтобы выполнить его вместе";
     act.append(h);
