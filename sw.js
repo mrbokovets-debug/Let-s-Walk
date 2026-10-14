@@ -1,7 +1,7 @@
 // Let's Walk service worker.
 // Pages: network first (so updates arrive right away), cached copy when offline.
 // Own icons and manifest: cache first. Other sites (map tiles, Supabase, CDNs) are not touched.
-const CACHE = "lets-walk-v1";
+const CACHE = "lets-walk-v2";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./assets/logo/icon-192.png", "./assets/logo/icon-512.png"];
 
 self.addEventListener("install", e => {
@@ -37,4 +37,34 @@ self.addEventListener("fetch", e => {
       return res;
     }))
   );
+});
+
+// ---------- push notifications ----------
+self.addEventListener("push", e => {
+  let m = {};
+  try { m = e.data ? e.data.json() : {}; } catch (_) { m = { body: e.data && e.data.text() }; }
+  e.waitUntil(self.registration.showNotification(m.title || "Let's Walk", {
+    body: m.body || "",
+    icon: "./assets/logo/icon-192.png",
+    badge: "./assets/logo/icon-192.png",
+    tag: m.tag || undefined,
+    renotify: !!m.tag,
+    data: { url: m.url || "./" }
+  }));
+});
+
+self.addEventListener("notificationclick", e => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || "./";
+  e.waitUntil((async () => {
+    const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    for (const c of all) {
+      if (c.url.startsWith(self.registration.scope)) {
+        await c.focus();
+        try { await c.navigate(url); } catch (_) { c.postMessage({ open: url }); }
+        return;
+      }
+    }
+    await self.clients.openWindow(url);
+  })());
 });

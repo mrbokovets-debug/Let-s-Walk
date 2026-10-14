@@ -222,6 +222,7 @@ textarea.input{resize:vertical;min-height:60px}
 
 .toast{position:fixed;z-index:1000;left:50%;transform:translateX(-50%);top:calc(70px + var(--sat));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-size:14px;max-width:calc(100% - 32px);text-align:center}
 .top-right{display:flex;gap:8px}
+.push-box{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--bg);border-radius:12px;padding:8px 8px 8px 12px;font-size:14px}
 .install{position:fixed;z-index:700;left:var(--gl);right:var(--gr);top:calc(66px + var(--sat));max-width:520px;background:var(--surface);border-radius:16px;box-shadow:var(--shadow);padding:12px 40px 12px 12px;display:flex;gap:12px;align-items:center}
 .install img{width:48px;height:48px;border-radius:12px;flex:none}
 .install .txt{display:flex;flex-direction:column;gap:2px;min-width:0;font-size:13px;color:var(--muted)}
@@ -391,6 +392,10 @@ textarea.input{resize:vertical;min-height:60px}
       <button class="primary" type="submit" id="meSave">Сохранить имя</button>
       <button class="ghost" type="button" id="meClose">Закрыть</button>
     </div>
+    <div class="field">
+      <span class="label">Уведомления</span>
+      <div class="push-box"><span id="pushState">…</span><button class="small" type="button" id="pushBtn" hidden></button></div>
+    </div>
     <div class="field" id="blockedWrap" hidden>
       <span class="label">Скрытые люди</span>
       <ul class="blocked-list" id="blockedList"></ul>
@@ -436,6 +441,13 @@ textarea.input{resize:vertical;min-height:60px}
 <div class="viewer" id="viewer" hidden role="dialog" aria-label="Фото">
   <img id="viewerImg" alt="">
   <button type="button" class="x" id="viewerX" aria-label="Закрыть">×</button>
+</div>
+
+<div class="install" id="pushAsk" hidden role="dialog" aria-label="Включить уведомления">
+  <img src="assets/logo/icon-192.png" alt="">
+  <div class="txt"><b>Не пропусти ответ</b><span>Включи уведомления о сообщениях и новых участниках.</span></div>
+  <button class="primary" type="button" id="pushAskYes">Включить</button>
+  <button class="x" type="button" id="pushAskX" aria-label="Не сейчас">×</button>
 </div>
 
 <div class="toast" id="toast" hidden></div>
@@ -1049,7 +1061,7 @@ async function toggleJoin(w,iJoined,btn){
   btn.disabled=true;
   try{
     if(iJoined){const {error}=await sb.from("walk_participants").delete().eq("walk_id",w.id).eq("user_id",myId);if(error)throw error;toast("Ты больше не идёшь")}
-    else{const {error}=await sb.from("walk_participants").insert({walk_id:w.id,user_id:myId});if(error&&error.code!=="23505")throw error;toast("Отлично, ты идёшь гулять!")}
+    else{const {error}=await sb.from("walk_participants").insert({walk_id:w.id,user_id:myId});if(error&&error.code!=="23505")throw error;toast("Отлично, ты идёшь гулять!");setTimeout(maybeAskPush,1500)}
     await reload();
   }catch(e){toast(errText(e))}
   btn.disabled=false;
@@ -1145,6 +1157,7 @@ $("walkForm").addEventListener("submit",async ev=>{
       await reload();
       if(data&&data.id) openDetail(data.id);
       toast("Готово! Теперь нажми «Позвать друзей».");
+      setTimeout(maybeAskPush,2500);
     }
   }catch(e){showErr(errText(e))}
   btn.disabled=false;
@@ -1203,6 +1216,57 @@ async function paintBlocked(){
   ids.forEach(id=>{const li=document.createElement("li");const n=document.createElement("span");n.textContent=names[id]||"Без имени";const b=document.createElement("button");b.type="button";b.className="small";b.textContent="Вернуть";b.onclick=()=>unblockUser(id);li.append(n,b);ul.append(li)});
 }
 
+// ---------- push notifications ----------
+const VAPID_PUBLIC="BJCpQ6e1WruyJ9_ka1vjjq73s_TshK86CCcgZiHtZZ-7w8yCykTVdX0KbFyfflSJgb5AutRf7sMcLeyyZGaUlq0";
+const isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
+const isStandalone=()=>window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
+const pushSupported=()=>"serviceWorker" in navigator&&"PushManager" in window&&"Notification" in window;
+function b64ToBytes(s){const p="=".repeat((4-s.length%4)%4);const b=atob((s+p).replace(/-/g,"+").replace(/_/g,"/"));return Uint8Array.from(b,c=>c.charCodeAt(0))}
+async function currentSub(){if(!pushSupported())return null;const reg=await navigator.serviceWorker.ready;return reg.pushManager.getSubscription()}
+async function saveSub(sub){
+  const j=sub.toJSON();
+  const {error}=await sb.from("push_subscriptions").upsert({user_id:myId,endpoint:j.endpoint,p256dh:j.keys.p256dh,auth:j.keys.auth},{onConflict:"endpoint"});
+  if(error) throw error;
+}
+async function enablePush(){
+  if(!myId){openAuth("Войди, чтобы включить уведомления");return false}
+  if(!pushSupported()){toast(isIOS&&!isStandalone()?"Сначала установи приложение на экран «Домой», потом включи уведомления там.":"Этот браузер не поддерживает уведомления.");return false}
+  const perm=await Notification.requestPermission();
+  if(perm!=="granted"){toast(perm==="denied"?"Уведомления запрещены. Разреши их в настройках телефона для Let's Walk.":"Уведомления не включены");paintPush();return false}
+  try{
+    const reg=await navigator.serviceWorker.ready;
+    const sub=(await reg.pushManager.getSubscription())||await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64ToBytes(VAPID_PUBLIC)});
+    await saveSub(sub);
+    toast("Уведомления включены 🔔"); paintPush(); return true;
+  }catch(e){toast(/push_subscriptions/.test(e&&e.message||"")?"Уведомления ещё не включены в базе. Запусти 07_push.sql.":"Не получилось включить уведомления. Попробуй ещё раз.");return false}
+}
+async function disablePush(){
+  const sub=await currentSub();
+  if(sub){try{await sb.from("push_subscriptions").delete().eq("endpoint",sub.endpoint)}catch(e){} try{await sub.unsubscribe()}catch(e){}}
+  toast("Уведомления выключены"); paintPush();
+}
+async function forgetThisDevice(){try{const sub=await currentSub();if(sub)await sb.from("push_subscriptions").delete().eq("endpoint",sub.endpoint)}catch(e){}}
+// After sign-in, re-attach this phone's subscription to the current account
+async function syncPushSubscription(){try{if(pushSupported()&&Notification.permission==="granted"){const sub=await currentSub();if(sub)await saveSub(sub)}}catch(e){}}
+async function paintPush(){
+  const st=$("pushState"), btn=$("pushBtn"); btn.hidden=true;
+  if(!pushSupported()){st.textContent=isIOS&&!isStandalone()?"Работают, когда приложение установлено на экран «Домой»":"Не поддерживаются в этом браузере";return}
+  const sub=Notification.permission==="granted"?await currentSub():null;
+  if(sub){st.textContent="🔔 Включены";btn.textContent="Выключить";btn.onclick=disablePush;btn.hidden=false;return}
+  if(Notification.permission==="denied"){st.textContent="Запрещены в настройках телефона";return}
+  st.textContent="Выключены";btn.textContent="Включить";btn.onclick=async()=>{await enablePush();paintPush()};btn.hidden=false;
+}
+// Gentle one-time prompt after joining or creating a walk
+async function maybeAskPush(){
+  if(!myId||!pushSupported()||Notification.permission!=="default") return;
+  let last=0; try{last=+localStorage.getItem("lw-push-asked")||0}catch(e){}
+  if(Date.now()-last<3*86400000) return;
+  $("pushAsk").hidden=false;
+}
+$("pushAskX").onclick=()=>{$("pushAsk").hidden=true;try{localStorage.setItem("lw-push-asked",String(Date.now()))}catch(e){}};
+$("pushAskYes").onclick=async()=>{$("pushAsk").hidden=true;try{localStorage.setItem("lw-push-asked",String(Date.now()))}catch(e){};await enablePush()};
+if("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message",e=>{if(e.data&&e.data.open){const h=e.data.open.split("#")[1];if(h)location.hash=h}});
+
 // ---------- auth ----------
 let authMode="in";
 function setAuthMode(m){
@@ -1260,6 +1324,7 @@ async function applySession(s){
   blocked=new Set();
   if(myId){try{const {data:bl}=await sb.from("blocks").select("blocked_id");(bl||[]).forEach(r=>blocked.add(r.blocked_id))}catch(e){}}
   paintMe(); render();
+  if(myId) syncPushSubscription();
 }
 function paintMe(){
   const b=$("meBtn");
@@ -1269,7 +1334,7 @@ function paintMe(){
 $("meBtn").onclick=()=>{
   if(!myId){openAuth();return}
   $("meAvatar").src=avatarFor(myId,myName); $("meName").textContent=myName||"Без имени"; $("meEmail").textContent=session?.user?.email||"";
-  $("newName").value=myName; $("meErr").hidden=true; paintBlocked(); $("meModal").hidden=false;
+  $("newName").value=myName; $("meErr").hidden=true; paintBlocked(); paintPush(); $("meModal").hidden=false;
 };
 $("meClose").onclick=()=>$("meModal").hidden=true;
 $("meModal").addEventListener("click",e=>{if(e.target===$("meModal"))$("meModal").hidden=true});
@@ -1282,7 +1347,7 @@ $("meForm").addEventListener("submit",async ev=>{
   if(error){$("meErr").textContent=errText(error);$("meErr").hidden=false;return}
   myName=n; names[myId]=n; paintMe(); $("meModal").hidden=true; toast("Имя сохранено"); render();
 });
-$("signOut").onclick=async()=>{await sb.auth.signOut();$("meModal").hidden=true;clearPick();await applySession(null);toast("Ты вышел из аккаунта")};
+$("signOut").onclick=async()=>{await forgetThisDevice();await sb.auth.signOut();$("meModal").hidden=true;clearPick();await applySession(null);toast("Ты вышел из аккаунта")};
 
 // ---------- boot ----------
 function getStartCenter(){
