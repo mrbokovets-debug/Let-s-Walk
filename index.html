@@ -258,8 +258,8 @@ textarea.input{resize:vertical;min-height:60px}
 
 <div class="modal" id="modal" hidden>
   <form class="form" id="walkForm" novalidate>
-    <h2>Новая прогулка</h2>
-    <div class="where"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z" fill="#F3C24B" stroke="#16261F" stroke-width="1.5"/><circle cx="12" cy="10" r="2.5" fill="#16261F"/></svg><span id="whereText">Точка на карте</span></div>
+    <h2 id="formTitle">Новая прогулка</h2>
+    <div class="where"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z" fill="#F3C24B" stroke="#16261F" stroke-width="1.5"/><circle cx="12" cy="10" r="2.5" fill="#16261F"/></svg><span id="whereText" style="flex:1;min-width:0">Точка на карте</span><button class="small" type="button" id="moveBtn" hidden>Изменить на карте</button></div>
     <div class="field">
       <label class="label" for="place">Где встречаемся</label>
       <input class="input" id="place" maxlength="90" placeholder="Например: у фонтана, главный вход" autocomplete="off">
@@ -479,7 +479,7 @@ $("goBtn").onclick=()=>{
   const go=()=>{const c=myLoc&&map.getBounds().contains(myLoc)?L.latLng(myLoc):map.getCenter();setPick(c);toast("Выбери место встречи на карте")};
   if(requireAuth(go,"Войди, чтобы позвать гулять")) go();
 };
-$("pickCancel").onclick=()=>{clearPick();render()};
+$("pickCancel").onclick=()=>{clearPick();render();if(editId)openForm()};
 $("pickGo").onclick=openForm;
 
 // ---------- render ----------
@@ -661,6 +661,7 @@ function card(w,byWalk,now){
    sh.append(document.createTextNode("Позвать друзей"));sh.onclick=()=>shareWalk(w);act.append(sh)}
   if(!selectedId&&hasPt(w)){const s=document.createElement("button");s.type="button";s.className="small";s.textContent="На карте";s.onclick=()=>{openDetail(w.id);map.flyTo([w.lat,w.lng],16,{duration:.6})};act.append(s)}
   if(myId&&w.authorId===myId){
+    const ed=document.createElement("button");ed.type="button";ed.className="small";ed.textContent="Изменить";ed.onclick=()=>startEdit(w);act.append(ed);
     const conf=confirming.has(w.id);
     const c=document.createElement("button");c.type="button";c.className="cancel"+(conf?" confirm":"");c.textContent=conf?"Точно отменить?":"Отменить";c.onclick=()=>cancelWalk(w);act.append(c);
     if(conf){const k=document.createElement("button");k.type="button";k.className="ghost";k.textContent="Нет";k.onclick=()=>{confirming.delete(w.id);render()};act.append(k)}
@@ -729,42 +730,90 @@ async function cancelWalk(w){
   try{const {error}=await sb.from("walks").delete().eq("id",w.id);if(error)throw error;selectedId=null;setHash(null);toast("Прогулка отменена");await reload()}catch(e){toast(errText(e))}
 }
 
-// ---------- create walk ----------
+// ---------- create / edit walk ----------
+let editId=null,editPt=null;
+function resetForm(){
+  $("walkForm").reset(); buildDays(false); $("dur45").checked=true; $("mood0").checked=true; $("time").value="";
+  editId=null; editPt=null;
+}
+function dayOffset(ms){const d=new Date(ms),n=new Date();return Math.round((new Date(d.getFullYear(),d.getMonth(),d.getDate())-new Date(n.getFullYear(),n.getMonth(),n.getDate()))/86400000)}
+function startEdit(w){
+  clearPick(); resetForm();
+  editId=w.id; editPt={lat:w.lat,lng:w.lng};
+  $("place").value=w.place||"";
+  const off=Math.min(Math.max(dayOffset(w.startAt),0),DAYS_AHEAD-1);
+  const dr=$("day"+off); if(dr) dr.checked=true;
+  $("time").value=fmtTime(w.startAt);
+  const du=$("dur"+w.duration); if(du) du.checked=true;
+  document.querySelectorAll('input[name="mood"]').forEach(r=>r.checked=r.value===w.mood);
+  $("wnote").value=w.note||"";
+  openForm();
+}
 function openForm(){
-  if(!pick) return;
+  if(!editId&&!pick) return;
   if(!requireAuth(openForm,"Войди, чтобы позвать гулять")) return;
   buildDays(true);
+  $("formTitle").textContent=editId?"Изменить прогулку":"Новая прогулка";
+  $("publishBtn").textContent=editId?"Сохранить изменения":"Позвать гулять";
+  $("moveBtn").hidden=!editId;
   $("modal").hidden=false;
   if(!$("time").value) $("time").value=defaultTime();
-  if(!$("place").value&&pick.label) $("place").value=pick.label;
-  $("whereText").textContent=pick.label?"Точка на карте: "+pick.label:"Точка на карте выбрана";
+  if(!editId&&!$("place").value&&pick.label) $("place").value=pick.label;
+  $("whereText").textContent=editId?(pick?"Новая точка на карте"+(pick.label?": "+pick.label:""):"Точка встречи на карте"):(pick.label?"Точка на карте: "+pick.label:"Точка на карте выбрана");
   showErr("");
 }
-function closeForm(){$("modal").hidden=true}
+function closeForm(){$("modal").hidden=true;if(editId){clearPick();resetForm()}}
 $("closeForm").onclick=closeForm;
 $("modal").addEventListener("click",e=>{if(e.target===$("modal"))closeForm()});
+$("moveBtn").onclick=()=>{
+  $("modal").hidden=true;
+  const p=pick||editPt; setPick(L.latLng(p.lat,p.lng)); map.setView([p.lat,p.lng],Math.max(map.getZoom(),16));
+  toast("Перетащи метку или нажми на карту, потом «Позвать гулять сюда»");
+};
 function showErr(m){$("formErr").textContent=m;$("formErr").hidden=!m}
 function readForm(){
   const day=+document.querySelector('input[name="day"]:checked').value, time=$("time").value;
   let startAt=null; if(time){const [h,m]=time.split(":").map(Number);const d=new Date();d.setDate(d.getDate()+day);d.setHours(h,m,0,0);startAt=d.getTime()}
   return{place:$("place").value.trim(),startAt,duration:+document.querySelector('input[name="dur"]:checked').value,mood:document.querySelector('input[name="mood"]:checked')?.value||"",note:$("wnote").value.trim()};
 }
+function describeChanges(old,f,pt){
+  const ch=[];
+  if(old.startAt!==f.startAt) ch.push("время: теперь "+dayLabel(f.startAt)+" в "+fmtTime(f.startAt));
+  if((old.place||"")!==f.place) ch.push("место: "+f.place);
+  else if(L.latLng(old.lat,old.lng).distanceTo([pt.lat,pt.lng])>15) ch.push("точка встречи на карте сдвинута");
+  if(old.duration!==f.duration) ch.push("длительность: "+f.duration+" мин");
+  if((old.mood||"")!==f.mood) ch.push("настроение: "+(f.mood||"без настроения"));
+  if((old.note||"")!==f.note) ch.push(f.note?"заметка: «"+f.note+"»":"заметка удалена");
+  return ch;
+}
 $("walkForm").addEventListener("submit",async ev=>{
   ev.preventDefault(); const f=readForm();
-  if(!pick){showErr("Сначала выбери место на карте.");return}
+  const pt=pick||editPt;
+  if(!pt){showErr("Сначала выбери место на карте.");return}
   if(!f.place){showErr("Напиши, где встречаемся.");$("place").focus();return}
   if(!f.startAt){showErr("Укажи время.");$("time").focus();return}
   if(f.startAt+f.duration*60000<Date.now()){showErr("Это время уже прошло. Выбери время позже или другой день.");return}
   if(!myId){showErr("Сначала войди.");return}
   const btn=$("publishBtn"); btn.disabled=true;
+  const row={place:f.place,lat:pt.lat,lng:pt.lng,start_at:new Date(f.startAt).toISOString(),duration_min:f.duration,mood:f.mood||null,note:f.note||null};
   try{
-    const {data,error}=await sb.from("walks").insert({author_id:myId,place:f.place,lat:pick.lat,lng:pick.lng,start_at:new Date(f.startAt).toISOString(),duration_min:f.duration,mood:f.mood||null,note:f.note||null}).select("id").single();
-    if(error) throw error;
-    $("walkForm").reset(); buildDays(false); $("dur45").checked=true; $("mood0").checked=true; $("time").value="";
-    closeForm(); clearPick();
-    await reload();
-    if(data&&data.id) openDetail(data.id);
-    toast("Готово! Теперь нажми «Позвать друзей».");
+    if(editId){
+      const id=editId, old=walks.find(x=>x.id===id);
+      const {error}=await sb.from("walks").update(row).eq("id",id).eq("author_id",myId);
+      if(error) throw error;
+      const ch=old?describeChanges(old,f,pt):[];
+      if(ch.length){try{await sb.from("walk_messages").insert({walk_id:id,user_id:myId,body:("✏️ Прогулка изменена — "+ch.join("; ")).slice(0,500)})}catch(e){}}
+      $("modal").hidden=true; clearPick(); resetForm();
+      await reload(); openDetail(id);
+      toast(ch.length?"Изменения сохранены, участники увидят их в чате":"Ничего не изменилось");
+    } else {
+      const {data,error}=await sb.from("walks").insert({author_id:myId,...row}).select("id").single();
+      if(error) throw error;
+      $("modal").hidden=true; clearPick(); resetForm();
+      await reload();
+      if(data&&data.id) openDetail(data.id);
+      toast("Готово! Теперь нажми «Позвать друзей».");
+    }
   }catch(e){showErr(errText(e))}
   btn.disabled=false;
 });
