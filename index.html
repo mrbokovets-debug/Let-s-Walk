@@ -904,7 +904,7 @@ function card(w,byWalk,now){
   people.append(avs,names_); b.append(people);
   const act=document.createElement("div"); act.className="wact";
   const iJoined=!!myId&&(byWalk[w.id]||[]).includes(myId);
-  if(w.authorId!==myId){const j=document.createElement("button");j.type="button";j.className="join"+(iJoined?" on":"");j.textContent=iJoined?(now>=w.startAt?"Я ухожу":"Я не смогу"):"Я с вами";j.onclick=()=>{if(requireAuth(null,"Войди, чтобы присоединиться"))toggleJoin(w,iJoined,j)};act.append(j)}
+  if(w.authorId!==myId){const j=document.createElement("button");j.type="button";j.className="join"+(iJoined?" on":"");j.textContent=iJoined?"Я не смогу":"Я с вами";j.onclick=()=>{if(requireAuth(null,"Войди, чтобы присоединиться"))toggleJoin(w,iJoined,j)};act.append(j)}
   {const sh=document.createElement("button");sh.type="button";sh.className="share";sh.setAttribute("aria-label","Позвать друзей на эту прогулку");
    sh.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
    sh.append(document.createTextNode("Позвать друзей"));sh.onclick=()=>shareWalk(w);act.append(sh)}
