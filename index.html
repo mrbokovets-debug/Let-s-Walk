@@ -30,7 +30,7 @@
 :root{
   --bg:#EAF0EC; --surface:#FBFDFB; --ink:#16261F; --muted:#5A6C63; --line:#D2DDD6;
   --leaf:#1E6B4E; --leaf-ink:#FFFFFF; --leaf-soft:#D6EADF;
-  --sun:#F3C24B; --sun-ink:#2B2206; --live:#D9482B; --danger:#B3361F;
+  --sun:#F3C24B; --sun-ink:#2B2206; --sun-soft:#FBEBC0; --live:#D9482B; --danger:#B3361F;
   --shadow:0 1px 2px rgba(22,38,31,.08),0 8px 24px rgba(22,38,31,.14);
   --display:"Unbounded","Arial Black",system-ui,sans-serif;
   --body:"Golos Text",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
@@ -39,7 +39,7 @@
 }
 @media (prefers-color-scheme:dark){:root{
   --bg:#0F1814;--surface:#16231D;--ink:#E5EEE8;--muted:#93A79C;--line:#2A3B33;
-  --leaf:#5CC596;--leaf-ink:#0B1A13;--leaf-soft:#1D3A2D;--live:#FF7A5C;--danger:#FF8A70;
+  --leaf:#5CC596;--leaf-ink:#0B1A13;--leaf-soft:#1D3A2D;--sun-soft:#4A3D17;--live:#FF7A5C;--danger:#FF8A70;
   --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.45);color-scheme:dark}}
 *{box-sizing:border-box}
 html,body{height:100%}
@@ -106,6 +106,7 @@ button{cursor:pointer}
 .empty strong{display:block;color:var(--ink);font-weight:600;margin-bottom:2px}
 .walk{background:var(--bg);border-radius:16px;display:grid;grid-template-columns:70px 1fr;overflow:hidden}
 .walk.sel{box-shadow:inset 0 0 0 2px var(--leaf)}
+.walk.mine .stub{background:var(--sun-soft)}
 .walk.tap{cursor:pointer;transition:transform .12s,box-shadow .12s}
 .walk.tap:active{transform:scale(.985);box-shadow:inset 0 0 0 2px var(--leaf)}
 .stub{background:var(--leaf-soft);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:10px 4px;text-align:center}
@@ -532,8 +533,11 @@ function locate(fly){
 $("locateBtn").onclick=()=>locate(true);
 
 // ---------- sheet ----------
+let lastView="";
 function layoutSheet(){
   const picking=!!pick;
+  const view=picking?"pick":selectedId?"walk:"+selectedId:expanded?"list":"closed";
+  if(view!==lastView){lastView=view;$("sheetBody").scrollTop=0}
   $("pickBox").hidden=!picking;
   $("mainHead").hidden=picking||!!selectedId;
   $("sheet").classList.toggle("detail",!!selectedId);
@@ -612,7 +616,7 @@ async function syncChat(w,member){
   if(error){toast(errText(error));return}
   msgs=(data||[]).map(m=>({id:m.id,userId:m.user_id,body:m.body,at:Date.parse(m.created_at)}));
   await fillNames(msgs.map(m=>m.userId));
-  paintMsgs(true);
+  paintMsgs(false);
   chatCh=sb.channel("chat-"+id)
     .on("postgres_changes",{event:"INSERT",schema:"public",table:"walk_messages",filter:"walk_id=eq."+id},async p=>{
       const r=p.new; if(!r||msgs.some(m=>m.id===r.id)) return;
@@ -717,7 +721,7 @@ function focusPoint(ll,instant){
 }
 function card(w,byWalk,now){
   const st=statusOf(w,now);
-  const li=document.createElement("li"); li.className="walk"+(w.id===selectedId?" sel":"");
+  const li=document.createElement("li"); li.className="walk"+(w.id===selectedId?" sel":"")+(w.authorId===myId?" mine":"");
   const stub=document.createElement("div"); stub.className="stub";
   const t=document.createElement("div"); t.className="t"; t.textContent=fmtTime(w.startAt);
   const d=document.createElement("div"); d.className="d"; d.textContent=dayLabel(w.startAt);
