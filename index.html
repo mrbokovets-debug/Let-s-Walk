@@ -159,6 +159,15 @@ button{cursor:pointer}
 .send textarea{flex:1;min-width:0;min-height:44px;max-height:120px;resize:none;border-radius:22px;padding:11px 14px}
 .send button{flex:none;width:44px;height:44px;border-radius:50%;border:0;background:var(--leaf);color:var(--leaf-ink);display:grid;place-items:center}
 .send button:disabled{opacity:.5}
+.send .cam{background:transparent;color:var(--leaf);box-shadow:inset 0 0 0 1.5px var(--line)}
+.photo-prev{display:flex;align-items:center;gap:10px;background:var(--bg);border-radius:14px;padding:8px;position:relative;font-size:13px;color:var(--muted)}
+.photo-prev img{width:56px;height:56px;border-radius:10px;object-fit:cover;flex:none}
+.photo-prev .x{margin-left:auto;width:32px;height:32px;border:0;background:transparent;color:var(--muted);font-size:20px}
+.msg .ph{display:block;width:220px;max-width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:12px;background:var(--line);margin:2px 0;cursor:zoom-in}
+.msg.mine .ph{background:rgba(255,255,255,.2)}
+.viewer{position:fixed;inset:0;z-index:1100;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;padding:calc(16px + var(--sat)) 12px calc(16px + var(--sab))}
+.viewer img{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px}
+.viewer .x{position:absolute;top:calc(10px + var(--sat));right:max(10px,env(safe-area-inset-right,0px));width:44px;height:44px;border-radius:50%;border:0;background:rgba(255,255,255,.15);color:#fff;font-size:24px}
 .copybox{display:flex;flex-direction:column;gap:10px}
 .more{border:0;background:transparent;color:var(--muted);width:40px;height:38px;border-radius:999px;font-size:20px;line-height:1;margin-left:auto}
 .pill.warn{background:var(--danger);color:#fff}
@@ -291,7 +300,14 @@ textarea.input{resize:vertical;min-height:60px}
       <ul class="msgs" id="msgs"></ul>
       <div id="chatInput" hidden>
         <div class="quick" id="quick"></div>
+        <div class="photo-prev" id="photoPrev" hidden>
+          <img id="photoPrevImg" alt="Выбранное фото">
+          <span>Фото будет отправлено с сообщением</span>
+          <button type="button" class="x" id="photoPrevX" aria-label="Убрать фото">×</button>
+        </div>
+        <input type="file" id="photoInput" accept="image/*" hidden>
         <form class="send" id="sendForm">
+          <button type="button" class="cam" id="camBtn" aria-label="Добавить фото"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.5" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
           <label for="msgText" class="sr" hidden>Сообщение</label>
           <textarea class="input" id="msgText" rows="1" maxlength="500" placeholder="Написать участникам…" enterkeyhint="send"></textarea>
           <button type="submit" id="sendBtn" aria-label="Отправить"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l16-8-6 16-2.5-6.5z" fill="currentColor"/></svg></button>
@@ -415,6 +431,11 @@ textarea.input{resize:vertical;min-height:60px}
     <textarea class="input" id="copyText" readonly></textarea>
     <div class="row"><button class="ghost" type="button" id="copyClose">Готово</button></div>
   </div>
+</div>
+
+<div class="viewer" id="viewer" hidden role="dialog" aria-label="Фото">
+  <img id="viewerImg" alt="">
+  <button type="button" class="x" id="viewerX" aria-label="Закрыть">×</button>
 </div>
 
 <div class="toast" id="toast" hidden></div>
@@ -646,16 +667,16 @@ async function syncChat(w,member){
   }
   if(wasMember) return;
   const seq=++chatSeq;
-  const {data,error}=await sb.from("walk_messages").select("id,user_id,body,created_at").eq("walk_id",id).order("created_at").limit(300);
+  const {data,error}=await sb.from("walk_messages").select("*").eq("walk_id",id).order("created_at").limit(300);
   if(seq!==chatSeq||chatWalk!==id) return;
   if(error){toast(errText(error));return}
-  msgs=(data||[]).map(m=>({id:m.id,userId:m.user_id,body:m.body,at:Date.parse(m.created_at)}));
+  msgs=(data||[]).map(m=>({id:m.id,userId:m.user_id,body:m.body,photo:m.photo_path||null,at:Date.parse(m.created_at)}));
   await fillNames(msgs.map(m=>m.userId));
   paintMsgs(false);
   chatCh=sb.channel("chat-"+id)
     .on("postgres_changes",{event:"INSERT",schema:"public",table:"walk_messages",filter:"walk_id=eq."+id},async p=>{
       const r=p.new; if(!r||msgs.some(m=>m.id===r.id)) return;
-      msgs.push({id:r.id,userId:r.user_id,body:r.body,at:Date.parse(r.created_at)});
+      msgs.push({id:r.id,userId:r.user_id,body:r.body,photo:r.photo_path||null,at:Date.parse(r.created_at)});
       await fillNames([r.user_id]); paintMsgs(true);
     })
     .on("postgres_changes",{event:"DELETE",schema:"public",table:"walk_messages"},p=>{
@@ -679,7 +700,13 @@ function paintMsgs(scroll){
     const mine=m.userId===myId;
     const li=document.createElement("li"); li.className="msg"+(mine?" mine":"");
     if(!mine&&prev!==m.userId){const w=document.createElement("span");w.className="who";w.textContent=names[m.userId]||"Кто-то";li.append(w)}
-    const t=document.createElement("span"); t.className="txt"; t.textContent=m.body;
+    if(m.photo){
+      const im=document.createElement("img"); im.className="ph"; im.alt="Фото"; im.loading="lazy";
+      const u=photoUrl(m.photo); if(u) im.src=u;
+      im.onclick=e=>{e.stopPropagation();const v=photoUrl(m.photo);if(v)openViewer(v)};
+      li.append(im);
+    }
+    const t=document.createElement("span"); t.className="txt"; t.textContent=m.body||""; if(!m.body) t.hidden=true;
     const tm=document.createElement("span"); tm.className="tm"; tm.textContent=(dayLabel(m.at)==="сегодня"?"":dayLabel(m.at)+" ")+fmtTime(m.at);
     li.append(t,tm);
     if(!mine){
@@ -696,15 +723,78 @@ function paintMsgs(scroll){
   });
   if(scroll){const body=$("sheetBody");requestAnimationFrame(()=>{body.scrollTop=body.scrollHeight})}
 }
-async function sendMsg(text){
-  const body=String(text||"").trim(); if(!body||!chatWalk||!chatMember) return;
+async function sendMsg(text,file){
+  const body=String(text||"").trim();
+  const photoFile=file||(text===$("msgText").value?pendingPhoto:null);
+  if((!body&&!photoFile)||!chatWalk||!chatMember) return;
   const btn=$("sendBtn"); btn.disabled=true;
-  const {data,error}=await sb.from("walk_messages").insert({walk_id:chatWalk,user_id:myId,body}).select("id,user_id,body,created_at").single();
+  let photo_path=null;
+  try{if(photoFile) photo_path=await uploadPhoto(chatWalk,photoFile)}
+  catch(e){btn.disabled=false;toast(e&&e.message?e.message:"Не получилось загрузить фото");return}
+  const row={walk_id:chatWalk,user_id:myId,body};
+  if(photo_path) row.photo_path=photo_path;
+  const {data,error}=await sb.from("walk_messages").insert(row).select("*").single();
   btn.disabled=false;
-  if(error){toast(errText(error));return}
-  if(text===$("msgText").value) {$("msgText").value="";autoGrow()}
-  if(data&&!msgs.some(m=>m.id===data.id)){msgs.push({id:data.id,userId:data.user_id,body:data.body,at:Date.parse(data.created_at)});paintMsgs(true)}
+  if(error){toast(/photo_path/.test(error.message||"")?"Фото ещё не включены в базе. Запусти 06_photos.sql.":errText(error));return}
+  if(text===$("msgText").value){$("msgText").value="";autoGrow();clearPendingPhoto()}
+  if(data&&!msgs.some(m=>m.id===data.id)){msgs.push({id:data.id,userId:data.user_id,body:data.body,photo:data.photo_path||null,at:Date.parse(data.created_at)});paintMsgs(true)}
 }
+
+// ---------- photos ----------
+let pendingPhoto=null;
+const photoUrls={}; let urlBatch=null;
+// Shrink to max 1280 px and JPEG ~80% so uploads are small and fast
+function shrinkPhoto(file){
+  return new Promise((res,rej)=>{
+    const url=URL.createObjectURL(file), img=new Image();
+    img.onload=()=>{
+      const max=1280, k=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));
+      const c=document.createElement("canvas"); c.width=Math.round(img.naturalWidth*k); c.height=Math.round(img.naturalHeight*k);
+      c.getContext("2d").drawImage(img,0,0,c.width,c.height); URL.revokeObjectURL(url);
+      c.toBlob(b=>b?res(b):rej(new Error("Не получилось обработать фото")),"image/jpeg",0.8);
+    };
+    img.onerror=()=>{URL.revokeObjectURL(url);rej(new Error("Этот формат фото не поддерживается"))};
+    img.src=url;
+  });
+}
+async function uploadPhoto(walkId,file){
+  const blob=await shrinkPhoto(file);
+  const name=Date.now().toString(36)+Math.random().toString(36).slice(2,8)+".jpg";
+  const path=walkId+"/"+myId+"/"+name;
+  const {error}=await sb.storage.from("walk-photos").upload(path,blob,{contentType:"image/jpeg",upsert:false});
+  if(error) throw new Error(/bucket|not found/i.test(error.message||"")?"Фото ещё не включены в базе. Запусти 06_photos.sql.":"Не получилось загрузить фото. Попробуй ещё раз.");
+  photoUrls[path]={url:URL.createObjectURL(blob),exp:Infinity};
+  return path;
+}
+// Private photos are shown through short-lived signed links, fetched in batches
+function photoUrl(path){
+  const c=photoUrls[path]; if(c&&c.exp>Date.now()+60000) return c.url;
+  if(!urlBatch){
+    urlBatch=new Set();
+    setTimeout(async()=>{
+      const paths=[...urlBatch]; urlBatch=null;
+      const {data}=await sb.storage.from("walk-photos").createSignedUrls(paths,3600);
+      (data||[]).forEach(d=>{if(d.signedUrl) photoUrls[d.path]={url:d.signedUrl,exp:Date.now()+3600000}});
+      // don't retry a failed photo for a while (avoids a request loop)
+      paths.forEach(p=>{if(!photoUrls[p]) photoUrls[p]={url:"",exp:Date.now()+150000}});
+      paintMsgs(false);
+    },50);
+  }
+  urlBatch.add(path); return null;
+}
+function openViewer(u){$("viewerImg").src=u;$("viewer").hidden=false}
+$("viewerX").onclick=()=>{$("viewer").hidden=true;$("viewerImg").src=""};
+$("viewer").addEventListener("click",e=>{if(e.target===$("viewer")){$("viewer").hidden=true;$("viewerImg").src=""}});
+function clearPendingPhoto(){pendingPhoto=null;$("photoPrev").hidden=true;$("photoPrevImg").src="";$("photoInput").value=""}
+let photoTarget="chat";
+$("camBtn").onclick=()=>{photoTarget="chat";$("photoInput").click()};
+$("photoPrevX").onclick=clearPendingPhoto;
+$("photoInput").addEventListener("change",()=>{
+  const f=$("photoInput").files&&$("photoInput").files[0]; if(!f) return;
+  if(photoTarget&&photoTarget.task){const w=photoTarget.task;photoTarget="chat";$("photoInput").value="";markTaskDone(w,null,f);return}
+  pendingPhoto=f; $("photoPrevImg").src=URL.createObjectURL(f); $("photoPrev").hidden=false;
+});
+
 function autoGrow(){const t=$("msgText");t.style.height="auto";t.style.height=Math.min(t.scrollHeight,120)+"px"}
 $("msgText").addEventListener("input",autoGrow);
 $("msgText").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing&&window.matchMedia("(hover:hover)").matches){e.preventDefault();sendMsg($("msgText").value)}});
@@ -866,9 +956,11 @@ function taskBlock(w,byWalk,now){
     const q=document.createElement("span"); q.className="done"; q.textContent="Точно выполнили?";
     const yes=document.createElement("button"); yes.type="button"; yes.className="done-btn"; yes.textContent="Да";
     yes.onclick=()=>{confirmTask=null;markTaskDone(w,yes)};
+    const ph=document.createElement("button"); ph.type="button"; ph.className="done-btn"; ph.textContent="Да, с фото 📷";
+    ph.onclick=()=>{confirmTask=null;photoTarget={task:w};$("photoInput").click();render()};
     const no=document.createElement("button"); no.type="button"; no.className="ghost"; no.textContent="Нет";
     no.onclick=()=>{confirmTask=null;render()};
-    act.append(q,yes,no);
+    act.append(q,yes,ph,no);
   } else if(member){
     const ok=document.createElement("button"); ok.type="button"; ok.className="done-btn"; ok.textContent="Выполнили! ✅";
     ok.onclick=()=>{confirmTask=w.id;render()}; act.append(ok);
@@ -889,13 +981,16 @@ async function nextTask(w,btn){
   if(error){toast(/task_seed/.test(error.message||"")?"Задания ещё не включены в базе. Запусти 04_tasks.sql.":errText(error));return}
   w.taskSeed=(w.taskSeed||0)+1; render();
 }
-async function markTaskDone(w,btn){
-  btn.disabled=true;
+async function markTaskDone(w,btn,file){
+  if(btn) btn.disabled=true;
   const task=taskOf(w);
   const {error}=await sb.rpc("mark_task_done",{w:w.id});
-  btn.disabled=false;
-  if(error){toast(/mark_task_done|function/.test(error.message||"")?"Задания ещё не включены в базе. Запусти 04_tasks.sql.":errText(error));return}
-  try{await sb.from("walk_messages").insert({walk_id:w.id,user_id:myId,body:("✅ Задание выполнено: «"+task+"»").slice(0,500)})}catch(e){}
+  if(btn) btn.disabled=false;
+  if(error){toast(/Could not find|does not exist|schema cache/i.test(error.message||"")?"Задания ещё не включены в базе. Запусти 04_tasks.sql.":errText(error));return}
+  const body=("✅ Задание выполнено: «"+task+"»").slice(0,500);
+  if(file&&chatWalk===w.id) await sendMsg(body,file);
+  else if(file){try{const path=await uploadPhoto(w.id,file);await sb.from("walk_messages").insert({walk_id:w.id,user_id:myId,body,photo_path:path})}catch(e){toast(e.message||"Не получилось загрузить фото")}}
+  else{try{await sb.from("walk_messages").insert({walk_id:w.id,user_id:myId,body})}catch(e){}}
   w.taskDoneAt=Date.now(); w.taskDoneBy=myId; render(); toast("Отлично! Задание выполнено 🎉");
   reload();
 }
