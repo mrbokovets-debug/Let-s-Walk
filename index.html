@@ -88,7 +88,8 @@ button{cursor:pointer}
 .sheet-title small{font-family:var(--body);font-size:13px;color:var(--muted);font-weight:400}
 .go{border:0;border-radius:999px;background:var(--sun);color:var(--sun-ink);font-family:var(--display);font-weight:700;font-size:15px;padding:13px 18px;display:flex;align-items:center;gap:8px;white-space:nowrap;flex:none}
 .sheet-body{overflow-y:auto;overscroll-behavior:contain;display:flex;flex-direction:column;gap:12px;padding-bottom:4px;min-height:0}
-.backlink{align-self:flex-start;border:0;background:none;color:var(--leaf);font-weight:600;padding:2px 0}
+.backlink{align-self:flex-start;border:0;background:none;color:var(--leaf);font-weight:600;padding:4px 0;font-size:16px}
+.sheet.detail{max-height:56vh}
 
 /* pick box */
 .pickbox{display:flex;flex-direction:column;gap:10px}
@@ -534,7 +535,8 @@ $("locateBtn").onclick=()=>locate(true);
 function layoutSheet(){
   const picking=!!pick;
   $("pickBox").hidden=!picking;
-  $("mainHead").hidden=picking;
+  $("mainHead").hidden=picking||!!selectedId;
+  $("sheet").classList.toggle("detail",!!selectedId);
   $("sheetBody").hidden=picking||!(expanded||selectedId);
   $("backAll").hidden=!selectedId;
   requestAnimationFrame(()=>document.documentElement.style.setProperty("--sheet-h",$("sheet").offsetHeight+"px"));
@@ -691,16 +693,27 @@ function openFromHash(){
   const m=/^#w-([0-9a-f-]{36})$/i.exec(location.hash||""); if(!m) return;
   const w=walks.find(x=>x.id===m[1]);
   if(!w||w.startAt+w.duration*60000<Date.now()){toast("Эта прогулка уже закончилась или её отменили");setHash(null);return}
-  openDetail(w.id); if(hasPt(w)) map.setView([w.lat,w.lng],16);
+  openDetail(w.id,true);
 }
 window.addEventListener("hashchange",openFromHash);
 $("copyClose").onclick=()=>$("copyModal").hidden=true;
 $("copyModal").addEventListener("click",e=>{if(e.target===$("copyModal"))$("copyModal").hidden=true});
 
-function openDetail(id){
+function openDetail(id,instant){
   clearPick(); selectedId=id; setHash(id); layoutSheet(); render();
   const w=walks.find(x=>x.id===id);
-  if(w&&hasPt(w)) map.panTo([w.lat,w.lng],{animate:true});
+  if(w&&hasPt(w)) focusPoint([w.lat,w.lng],instant);
+}
+// Move the map so the point sits in the middle of the part of the map that is still visible above the bottom panel
+function focusPoint(ll,instant){
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    const z=Math.max(map.getZoom(),15);
+    const H=map.getSize().y, top=90, sheetH=$("sheet").offsetHeight||0;
+    const visibleMid=top+Math.max(0,H-sheetH-top)/2;
+    const p=map.project(L.latLng(ll),z).add([0,H/2-visibleMid]);
+    const target=map.unproject(p,z);
+    if(instant) map.setView(target,z,{animate:false}); else map.flyTo(target,z,{duration:.6});
+  }));
 }
 function card(w,byWalk,now){
   const st=statusOf(w,now);
@@ -751,7 +764,7 @@ function card(w,byWalk,now){
   // in the list, tapping anywhere on the card (except its buttons) opens the walk on the map
   if(!selectedId&&hasPt(w)){
     li.classList.add("tap"); li.tabIndex=0; li.setAttribute("role","button"); li.setAttribute("aria-label","Показать на карте: "+(w.place||"прогулка")+", "+dayLabel(w.startAt)+" в "+fmtTime(w.startAt));
-    const go=()=>{openDetail(w.id);map.flyTo([w.lat,w.lng],16,{duration:.6})};
+    const go=()=>openDetail(w.id);
     li.addEventListener("click",e=>{if(e.target.closest("button,a,input,textarea"))return;go()});
     li.addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.target===li){e.preventDefault();go()}});
   }
