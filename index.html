@@ -122,6 +122,23 @@ button{cursor:pointer}
 .join.on{background:transparent;color:var(--leaf);box-shadow:inset 0 0 0 1.5px var(--leaf)}
 .small{border:0;background:transparent;color:var(--leaf);font-weight:600;padding:9px 4px}
 .share{border:0;border-radius:999px;padding:9px 14px;font-weight:600;background:var(--sun);color:var(--sun-ink);display:inline-flex;align-items:center;gap:6px}
+.chat{display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--line);padding-top:12px}
+.chat h3{margin:0;font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px}
+.chat h3 .cnt{font-size:12px;font-weight:600;color:var(--muted)}
+.msgs{display:flex;flex-direction:column;gap:6px;list-style:none;margin:0;padding:0}
+.msg{max-width:82%;align-self:flex-start;background:var(--bg);border-radius:16px 16px 16px 4px;padding:7px 11px;display:flex;flex-direction:column;gap:1px}
+.msg.mine{align-self:flex-end;background:var(--leaf);color:var(--leaf-ink);border-radius:16px 16px 4px 16px}
+.msg .who{font-size:12px;font-weight:600;color:var(--leaf)}
+.msg .txt{font-size:15px;white-space:pre-wrap;overflow-wrap:anywhere}
+.msg .tm{font-size:11px;opacity:.65;align-self:flex-end;font-variant-numeric:tabular-nums}
+.chat-gate{font-size:14px;color:var(--muted);background:var(--bg);border-radius:14px;padding:12px}
+.quick{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.quick::-webkit-scrollbar{display:none}
+.quick button{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 11px;font-size:13px}
+.send{display:flex;gap:8px;align-items:flex-end}
+.send textarea{flex:1;min-width:0;min-height:44px;max-height:120px;resize:none;border-radius:22px;padding:11px 14px}
+.send button{flex:none;width:44px;height:44px;border-radius:50%;border:0;background:var(--leaf);color:var(--leaf-ink);display:grid;place-items:center}
+.send button:disabled{opacity:.5}
 .copybox{display:flex;flex-direction:column;gap:10px}
 .copybox textarea{font-size:14px;min-height:96px}
 .cancel{border:0;background:transparent;color:var(--danger);font-weight:500;padding:9px 4px}
@@ -222,6 +239,19 @@ textarea.input{resize:vertical;min-height:60px}
   <div class="sheet-body" id="sheetBody" hidden>
     <button class="backlink" id="backAll" type="button" hidden>← Все прогулки</button>
     <ul class="list" id="list"></ul>
+    <section class="chat" id="chat" hidden aria-label="Чат прогулки">
+      <h3>Чат прогулки <span class="cnt" id="chatCnt"></span></h3>
+      <div class="chat-gate" id="chatGate" hidden></div>
+      <ul class="msgs" id="msgs"></ul>
+      <div id="chatInput" hidden>
+        <div class="quick" id="quick"></div>
+        <form class="send" id="sendForm">
+          <label for="msgText" class="sr" hidden>Сообщение</label>
+          <textarea class="input" id="msgText" rows="1" maxlength="500" placeholder="Написать участникам…" enterkeyhint="send"></textarea>
+          <button type="submit" id="sendBtn" aria-label="Отправить"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l16-8-6 16-2.5-6.5z" fill="currentColor"/></svg></button>
+        </form>
+      </div>
+    </section>
     <div class="empty" id="empty" hidden><strong>Пока никто не зовёт гулять</strong>Нажми на карту и позови первым.</div>
   </div>
 </section>
@@ -480,8 +510,85 @@ async function render(){
   const shown=selectedId?upcoming.filter(w=>w.id===selectedId):upcoming;
   $("empty").hidden=!!shown.length||!loaded;
   shown.forEach(w=>list.append(card(w,byWalk,now)));
+  const sel=selectedId?upcoming.find(w=>w.id===selectedId):null;
+  syncChat(sel,sel&&!!myId&&(sel.authorId===myId||(byWalk[sel.id]||[]).includes(myId)));
   layoutSheet();
 }
+
+// ---------- chat ----------
+const QUICK=["Я на месте 👋","Опаздываю на 5 минут","Где вы?","Выхожу","Не успеваю, простите"];
+QUICK.forEach(q=>{const b=document.createElement("button");b.type="button";b.textContent=q;b.onclick=()=>sendMsg(q);$("quick").append(b)});
+let chatWalk=null,chatMember=false,chatCh=null,msgs=[],chatSeq=0;
+async function syncChat(w,member){
+  const id=w?w.id:null;
+  if(id!==chatWalk){
+    if(chatCh){sb.removeChannel(chatCh);chatCh=null}
+    chatWalk=id; chatMember=false; msgs=[]; $("msgs").innerHTML=""; $("msgText").value="";
+  }
+  $("chat").hidden=!id;
+  if(!id) return;
+  const wasMember=chatMember; chatMember=!!member;
+  $("chatInput").hidden=!chatMember;
+  $("chatGate").hidden=chatMember;
+  if(!chatMember){
+    $("msgs").innerHTML=""; $("chatCnt").textContent="";
+    $("chatGate").textContent=!myId?"Войди и нажми «Я с вами», чтобы открыть чат с участниками.":"Нажми «Я с вами», чтобы открыть чат с участниками.";
+    if(chatCh){sb.removeChannel(chatCh);chatCh=null}
+    return;
+  }
+  if(wasMember) return;
+  const seq=++chatSeq;
+  const {data,error}=await sb.from("walk_messages").select("id,user_id,body,created_at").eq("walk_id",id).order("created_at").limit(300);
+  if(seq!==chatSeq||chatWalk!==id) return;
+  if(error){toast(errText(error));return}
+  msgs=(data||[]).map(m=>({id:m.id,userId:m.user_id,body:m.body,at:Date.parse(m.created_at)}));
+  await fillNames(msgs.map(m=>m.userId));
+  paintMsgs(true);
+  chatCh=sb.channel("chat-"+id)
+    .on("postgres_changes",{event:"INSERT",schema:"public",table:"walk_messages",filter:"walk_id=eq."+id},async p=>{
+      const r=p.new; if(!r||msgs.some(m=>m.id===r.id)) return;
+      msgs.push({id:r.id,userId:r.user_id,body:r.body,at:Date.parse(r.created_at)});
+      await fillNames([r.user_id]); paintMsgs(true);
+    })
+    .on("postgres_changes",{event:"DELETE",schema:"public",table:"walk_messages"},p=>{
+      const old=p.old; if(!old) return; const n=msgs.length; msgs=msgs.filter(m=>m.id!==old.id); if(msgs.length!==n) paintMsgs(false);
+    })
+    .subscribe();
+}
+async function fillNames(ids){
+  const need=[...new Set(ids)].filter(id=>id&&!(id in names));
+  if(!need.length) return;
+  const {data}=await sb.from("profiles").select("id,name").in("id",need);
+  (data||[]).forEach(p=>names[p.id]=p.name); need.forEach(id=>{if(!(id in names))names[id]=""});
+}
+function paintMsgs(scroll){
+  const ul=$("msgs"); ul.innerHTML="";
+  $("chatCnt").textContent=msgs.length?String(msgs.length):"";
+  if(!msgs.length){const e=document.createElement("li");e.className="chat-gate";e.textContent="Пока тихо. Напиши первым, например «Я на месте».";ul.append(e)}
+  let prev=null;
+  msgs.forEach(m=>{
+    const mine=m.userId===myId;
+    const li=document.createElement("li"); li.className="msg"+(mine?" mine":"");
+    if(!mine&&prev!==m.userId){const w=document.createElement("span");w.className="who";w.textContent=names[m.userId]||"Кто-то";li.append(w)}
+    const t=document.createElement("span"); t.className="txt"; t.textContent=m.body;
+    const tm=document.createElement("span"); tm.className="tm"; tm.textContent=(dayLabel(m.at)==="сегодня"?"":dayLabel(m.at)+" ")+fmtTime(m.at);
+    li.append(t,tm); ul.append(li); prev=m.userId;
+  });
+  if(scroll){const body=$("sheetBody");requestAnimationFrame(()=>{body.scrollTop=body.scrollHeight})}
+}
+async function sendMsg(text){
+  const body=String(text||"").trim(); if(!body||!chatWalk||!chatMember) return;
+  const btn=$("sendBtn"); btn.disabled=true;
+  const {data,error}=await sb.from("walk_messages").insert({walk_id:chatWalk,user_id:myId,body}).select("id,user_id,body,created_at").single();
+  btn.disabled=false;
+  if(error){toast(errText(error));return}
+  if(text===$("msgText").value) {$("msgText").value="";autoGrow()}
+  if(data&&!msgs.some(m=>m.id===data.id)){msgs.push({id:data.id,userId:data.user_id,body:data.body,at:Date.parse(data.created_at)});paintMsgs(true)}
+}
+function autoGrow(){const t=$("msgText");t.style.height="auto";t.style.height=Math.min(t.scrollHeight,120)+"px"}
+$("msgText").addEventListener("input",autoGrow);
+$("msgText").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing&&window.matchMedia("(hover:hover)").matches){e.preventDefault();sendMsg($("msgText").value)}});
+$("sendForm").addEventListener("submit",e=>{e.preventDefault();sendMsg($("msgText").value)});
 // ---------- share ----------
 const SITE_URL="https://mrbokovets-debug.github.io/Let-s-Walk/";
 const walkUrl=id=>SITE_URL+"#w-"+id;
