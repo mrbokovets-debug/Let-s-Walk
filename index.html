@@ -146,6 +146,18 @@ button{cursor:pointer}
 .send button{flex:none;width:44px;height:44px;border-radius:50%;border:0;background:var(--leaf);color:var(--leaf-ink);display:grid;place-items:center}
 .send button:disabled{opacity:.5}
 .copybox{display:flex;flex-direction:column;gap:10px}
+.more{border:0;background:transparent;color:var(--muted);width:40px;height:38px;border-radius:999px;font-size:20px;line-height:1;margin-left:auto}
+.pill.warn{background:var(--danger);color:#fff}
+.msg-act{display:flex;gap:12px;font-size:13px;margin-top:4px}
+.msg-act button{border:0;background:none;padding:2px 0;color:var(--danger);font-weight:600}
+.msg-act button.hide{color:var(--muted)}
+.reasons{display:flex;flex-direction:column;gap:8px}
+.reason{display:flex;gap:10px;align-items:center;background:var(--bg);border-radius:12px;padding:11px 12px;font-size:15px}
+.reason input{width:18px;height:18px;margin:0;accent-color:var(--leaf)}
+.check{display:flex;gap:10px;align-items:center;font-size:14px}
+.check input{width:18px;height:18px;margin:0;accent-color:var(--leaf)}
+.blocked-list{display:flex;flex-direction:column;gap:6px;list-style:none;margin:0;padding:0}
+.blocked-list li{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--bg);border-radius:12px;padding:8px 8px 8px 12px;font-size:14px}
 .copybox textarea{font-size:14px;min-height:96px}
 .cancel{border:0;background:transparent;color:var(--danger);font-weight:500;padding:9px 4px}
 .cancel.confirm{background:var(--danger);color:#fff;border-radius:999px;padding:9px 14px}
@@ -358,7 +370,36 @@ textarea.input{resize:vertical;min-height:60px}
       <button class="primary" type="submit" id="meSave">Сохранить имя</button>
       <button class="ghost" type="button" id="meClose">Закрыть</button>
     </div>
+    <div class="field" id="blockedWrap" hidden>
+      <span class="label">Скрытые люди</span>
+      <ul class="blocked-list" id="blockedList"></ul>
+    </div>
     <div class="row"><button class="cancel" type="button" id="signOut">Выйти из аккаунта</button></div>
+  </form>
+</div>
+
+<div class="modal" id="safeModal" hidden>
+  <form class="form" id="safeForm" novalidate>
+    <h2 id="safeTitle">Пожаловаться</h2>
+    <p class="lead" id="safeLead"></p>
+    <div class="reasons" role="radiogroup" aria-label="Причина">
+      <label class="reason"><input type="radio" name="reason" value="spam" id="rsSpam"> Спам или реклама</label>
+      <label class="reason"><input type="radio" name="reason" value="abuse" id="rsAbuse"> Оскорбления или грубость</label>
+      <label class="reason"><input type="radio" name="reason" value="danger" id="rsDanger"> Подозрительное или опасное поведение</label>
+      <label class="reason"><input type="radio" name="reason" value="fake" id="rsFake"> Ненастоящая прогулка</label>
+      <label class="reason"><input type="radio" name="reason" value="other" id="rsOther"> Другое</label>
+    </div>
+    <div class="field">
+      <label class="label" for="safeDetails">Подробнее (необязательно)</label>
+      <textarea class="input" id="safeDetails" maxlength="300" placeholder="Что произошло?"></textarea>
+    </div>
+    <label class="check"><input type="checkbox" id="safeBlock" checked> Скрыть этого человека у меня</label>
+    <div class="err" id="safeErr" hidden></div>
+    <div class="row">
+      <button class="primary" type="submit" id="safeSend">Отправить жалобу</button>
+      <button class="ghost" type="button" id="safeClose">Отмена</button>
+    </div>
+    <div class="row"><button class="small" type="button" id="safeOnlyHide">Только скрыть, без жалобы</button></div>
   </form>
 </div>
 
@@ -505,7 +546,7 @@ $("pickGo").onclick=openForm;
 // ---------- render ----------
 async function render(){
   const now=Date.now();
-  const upcoming=walks.filter(w=>w.startAt+w.duration*60000>now).sort((a,b)=>a.startAt-b.startAt);
+  const upcoming=walks.filter(w=>w.startAt+w.duration*60000>now&&!(blocked.has(w.authorId)&&w.authorId!==myId)).sort((a,b)=>a.startAt-b.startAt);
   const byWalk={}; joins.forEach(j=>{(byWalk[j.walkId]=byWalk[j.walkId]||[]).push(j.userId)});
   if(selectedId&&!upcoming.some(w=>w.id===selectedId)) selectedId=null;
 
@@ -587,12 +628,24 @@ function paintMsgs(scroll){
   if(!msgs.length){const e=document.createElement("li");e.className="chat-gate";e.textContent="Пока тихо. Напиши первым, например «Я на месте».";ul.append(e)}
   let prev=null;
   msgs.forEach(m=>{
+    if(blocked.has(m.userId)&&m.userId!==myId) return;
     const mine=m.userId===myId;
     const li=document.createElement("li"); li.className="msg"+(mine?" mine":"");
     if(!mine&&prev!==m.userId){const w=document.createElement("span");w.className="who";w.textContent=names[m.userId]||"Кто-то";li.append(w)}
     const t=document.createElement("span"); t.className="txt"; t.textContent=m.body;
     const tm=document.createElement("span"); tm.className="tm"; tm.textContent=(dayLabel(m.at)==="сегодня"?"":dayLabel(m.at)+" ")+fmtTime(m.at);
-    li.append(t,tm); ul.append(li); prev=m.userId;
+    li.append(t,tm);
+    if(!mine){
+      li.style.cursor="pointer";
+      li.onclick=()=>{
+        const open=li.querySelector(".msg-act"); if(open){open.remove();return}
+        const a=document.createElement("div"); a.className="msg-act";
+        const r=document.createElement("button"); r.type="button"; r.textContent="Пожаловаться"; r.onclick=e=>{e.stopPropagation();openSafety({userId:m.userId,walkId:chatWalk,messageId:m.id})};
+        const h=document.createElement("button"); h.type="button"; h.className="hide"; h.textContent="Скрыть человека"; h.onclick=e=>{e.stopPropagation();blockUser(m.userId)};
+        a.append(r,h); li.append(a);
+      };
+    }
+    ul.append(li); prev=m.userId;
   });
   if(scroll){const body=$("sheetBody");requestAnimationFrame(()=>{body.scrollTop=body.scrollHeight})}
 }
@@ -654,6 +707,7 @@ function card(w,byWalk,now){
   const top=document.createElement("div"); top.className="wtop";
   const p1=document.createElement("span"); p1.className="pill"+(st.live?" live":""); p1.textContent=st.text; top.append(p1);
   if(w.mood){const p2=document.createElement("span");p2.className="pill mood";p2.textContent=w.mood;top.append(p2)}
+  if(w.hidden){const p3=document.createElement("span");p3.className="pill warn";p3.textContent="скрыта после жалоб";top.append(p3)}
   const place=document.createElement("div"); place.className="place"; place.textContent=w.place||"Точка на карте";
   const km=(w.duration/60*4.5).toFixed(1).replace(".",",");
   const steps=Math.round(w.duration*110/100)*100;
@@ -680,6 +734,7 @@ function card(w,byWalk,now){
    sh.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
    sh.append(document.createTextNode("Позвать друзей"));sh.onclick=()=>shareWalk(w);act.append(sh)}
   if(!selectedId&&hasPt(w)){const s=document.createElement("button");s.type="button";s.className="small";s.textContent="На карте";s.onclick=()=>{openDetail(w.id);map.flyTo([w.lat,w.lng],16,{duration:.6})};act.append(s)}
+  if(w.authorId!==myId){const mo=document.createElement("button");mo.type="button";mo.className="more";mo.textContent="⋯";mo.setAttribute("aria-label","Пожаловаться или скрыть человека");mo.onclick=()=>openSafety({userId:w.authorId,walkId:w.id});act.append(mo)}
   if(myId&&w.authorId===myId){
     const ed=document.createElement("button");ed.type="button";ed.className="small";ed.textContent="Изменить";ed.onclick=()=>startEdit(w);act.append(ed);
     const conf=confirming.has(w.id);
@@ -704,9 +759,9 @@ async function reload(){
   loading=true;
   try{
     const since=new Date(Date.now()-3*3600000).toISOString();
-    const {data:ws,error:e1}=await sb.from("walks").select("id,author_id,place,lat,lng,start_at,duration_min,mood,note,route").gte("start_at",since).order("start_at").limit(500);
+    const {data:ws,error:e1}=await sb.from("walks").select("*").gte("start_at",since).order("start_at").limit(500);
     if(e1) throw e1;
-    walks=(ws||[]).map(r=>({id:r.id,authorId:r.author_id,place:r.place,lat:r.lat,lng:r.lng,startAt:Date.parse(r.start_at),duration:r.duration_min,mood:r.mood,note:r.note,route:r.route}));
+    walks=(ws||[]).map(r=>({id:r.id,authorId:r.author_id,place:r.place,lat:r.lat,lng:r.lng,startAt:Date.parse(r.start_at),duration:r.duration_min,mood:r.mood,note:r.note,route:r.route,hidden:!!r.hidden}));
     const ids=walks.map(w=>w.id);
     joins=[];
     if(ids.length){
@@ -838,6 +893,59 @@ $("walkForm").addEventListener("submit",async ev=>{
   btn.disabled=false;
 });
 
+// ---------- safety ----------
+let blocked=new Set(), safeTarget=null;
+function openSafety(t){
+  if(!requireAuth(()=>openSafety(t),"Войди, чтобы пожаловаться")) return;
+  if(t.userId===myId) return;
+  safeTarget=t;
+  $("safeForm").reset(); $("safeBlock").checked=true; $("safeErr").hidden=true;
+  const who=names[t.userId]||"этого человека";
+  $("safeTitle").textContent="Пожаловаться";
+  $("safeLead").textContent=t.messageId?"Жалоба на сообщение от «"+who+"».":"Жалоба на прогулку и её автора «"+who+"». Мы посмотрим её вручную.";
+  $("safeModal").hidden=false;
+}
+$("safeClose").onclick=()=>$("safeModal").hidden=true;
+$("safeModal").addEventListener("click",e=>{if(e.target===$("safeModal"))$("safeModal").hidden=true});
+$("safeForm").addEventListener("submit",async ev=>{
+  ev.preventDefault(); if(!safeTarget) return;
+  const reason=document.querySelector('input[name="reason"]:checked')?.value;
+  if(!reason){$("safeErr").textContent="Выбери причину.";$("safeErr").hidden=false;return}
+  const btn=$("safeSend"); btn.disabled=true;
+  const row={reporter_id:myId,target_user:safeTarget.userId,reason,details:$("safeDetails").value.trim()||null};
+  if(safeTarget.walkId) row.walk_id=safeTarget.walkId;
+  if(safeTarget.messageId) row.message_id=safeTarget.messageId;
+  const {error}=await sb.from("reports").insert(row);
+  btn.disabled=false;
+  if(error){$("safeErr").textContent=errText(error);$("safeErr").hidden=false;return}
+  $("safeModal").hidden=true;
+  if($("safeBlock").checked) await blockUser(safeTarget.userId,true);
+  toast("Спасибо! Жалоба отправлена.");
+  reload();
+});
+$("safeOnlyHide").onclick=async()=>{if(!safeTarget)return;$("safeModal").hidden=true;await blockUser(safeTarget.userId)};
+async function blockUser(id,quiet){
+  if(!myId||id===myId) return;
+  const {error}=await sb.from("blocks").insert({blocker_id:myId,blocked_id:id});
+  if(error&&error.code!=="23505"){toast(errText(error));return}
+  blocked.add(id);
+  if(selectedId){const w=walks.find(x=>x.id===selectedId);if(w&&w.authorId===id){selectedId=null;setHash(null)}}
+  if(!quiet) toast((names[id]||"Человек")+" скрыт. Вернуть можно в профиле.");
+  render(); if(chatWalk) paintMsgs(false);
+}
+async function unblockUser(id){
+  const {error}=await sb.from("blocks").delete().eq("blocker_id",myId).eq("blocked_id",id);
+  if(error){toast(errText(error));return}
+  blocked.delete(id); paintBlocked(); render(); if(chatWalk) paintMsgs(false);
+}
+async function paintBlocked(){
+  const ids=[...blocked]; $("blockedWrap").hidden=!ids.length;
+  if(!ids.length) return;
+  await fillNames(ids);
+  const ul=$("blockedList"); ul.innerHTML="";
+  ids.forEach(id=>{const li=document.createElement("li");const n=document.createElement("span");n.textContent=names[id]||"Без имени";const b=document.createElement("button");b.type="button";b.className="small";b.textContent="Вернуть";b.onclick=()=>unblockUser(id);li.append(n,b);ul.append(li)});
+}
+
 // ---------- auth ----------
 let authMode="in";
 function setAuthMode(m){
@@ -892,6 +1000,8 @@ async function applySession(s){
     myName=(data&&data.name)||s.user.user_metadata?.name||"";
     names[myId]=myName;
   }
+  blocked=new Set();
+  if(myId){try{const {data:bl}=await sb.from("blocks").select("blocked_id");(bl||[]).forEach(r=>blocked.add(r.blocked_id))}catch(e){}}
   paintMe(); render();
 }
 function paintMe(){
@@ -902,7 +1012,7 @@ function paintMe(){
 $("meBtn").onclick=()=>{
   if(!myId){openAuth();return}
   $("meAvatar").src=avatarFor(myId,myName); $("meName").textContent=myName||"Без имени"; $("meEmail").textContent=session?.user?.email||"";
-  $("newName").value=myName; $("meErr").hidden=true; $("meModal").hidden=false;
+  $("newName").value=myName; $("meErr").hidden=true; paintBlocked(); $("meModal").hidden=false;
 };
 $("meClose").onclick=()=>$("meModal").hidden=true;
 $("meModal").addEventListener("click",e=>{if(e.target===$("meModal"))$("meModal").hidden=true});
