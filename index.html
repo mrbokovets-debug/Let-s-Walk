@@ -118,7 +118,7 @@ button{cursor:pointer}
 
 /* create modal */
 .modal{position:fixed;inset:0;z-index:900;background:rgba(10,20,15,.45);display:flex;align-items:flex-end;justify-content:center}
-.form{background:var(--surface);width:100%;max-width:640px;max-height:92vh;overflow-y:auto;border-radius:22px 22px 0 0;padding:18px var(--gr) calc(18px + var(--sab)) var(--gl);display:flex;flex-direction:column;gap:14px}
+.form{background:var(--surface);width:100%;max-width:640px;max-height:92vh;overflow-y:auto;overflow-x:hidden;border-radius:22px 22px 0 0;padding:18px var(--gr) calc(18px + var(--sab)) var(--gl);display:flex;flex-direction:column;gap:14px}
 .form h2{font-family:var(--display);font-weight:500;font-size:19px;margin:0}
 .where{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);background:var(--bg);border-radius:12px;padding:8px 10px}
 .where svg{flex:none}
@@ -134,6 +134,17 @@ textarea.input{resize:vertical;min-height:60px}
 .chip span{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:7px 13px;font-size:14px;background:var(--bg)}
 .chip input:checked+span{background:var(--leaf);border-color:var(--leaf);color:var(--leaf-ink)}
 .chip input:focus-visible+span{outline:3px solid var(--sun);outline-offset:2px}
+.days{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x proximity;margin:0 calc(-1 * var(--gr)) 0 calc(-1 * var(--gl));padding:2px var(--gr) 6px var(--gl);scrollbar-width:none}
+.days::-webkit-scrollbar{display:none}
+.day{position:relative;flex:none;scroll-snap-align:start}
+.day input{position:absolute;opacity:0;inset:0;width:100%;height:100%;margin:0;cursor:pointer}
+.day span{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:62px;height:58px;padding:0 10px;border:1px solid var(--line);border-radius:14px;background:var(--bg);line-height:1.15}
+.day b{font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
+.day small{font-size:12px;color:var(--muted)}
+.day.weekend small{color:var(--live)}
+.day input:checked+span{background:var(--leaf);border-color:var(--leaf);color:var(--leaf-ink)}
+.day input:checked+span small{color:var(--leaf-ink);opacity:.85}
+.day input:focus-visible+span{outline:3px solid var(--sun);outline-offset:2px}
 .err{color:var(--danger);font-size:14px}
 .ai-box{border:1px dashed var(--leaf);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:8px;background:var(--leaf-soft)}
 .ai-box h3{margin:0;font-size:15px}
@@ -196,18 +207,13 @@ textarea.input{resize:vertical;min-height:60px}
       <label class="label" for="place">Где встречаемся</label>
       <input class="input" id="place" maxlength="90" placeholder="Например: у фонтана, главный вход" autocomplete="off">
     </div>
-    <div class="two">
-      <div class="field">
-        <span class="label">День</span>
-        <div class="chips" role="radiogroup">
-          <label class="chip"><input type="radio" name="day" id="dayToday" value="0" checked><span>Сегодня</span></label>
-          <label class="chip"><input type="radio" name="day" id="dayTomorrow" value="1"><span>Завтра</span></label>
-        </div>
-      </div>
-      <div class="field">
-        <label class="label" for="time">Во сколько</label>
-        <input class="input" id="time" type="time" step="300">
-      </div>
+    <div class="field">
+      <span class="label" id="dayLabel">День</span>
+      <div class="days" role="radiogroup" aria-labelledby="dayLabel" id="dayChips"></div>
+    </div>
+    <div class="field">
+      <label class="label" for="time">Во сколько</label>
+      <input class="input" id="time" type="time" step="300" style="max-width:200px">
     </div>
     <div class="field">
       <span class="label">Сколько гуляем</span>
@@ -262,7 +268,25 @@ function notice(m){$("noticeText").textContent=m;$("notice").hidden=!m}
 $("noticeX").onclick=()=>{$("notice").hidden=true;try{localStorage.setItem("lw-notice-closed","1")}catch(e){}};
 const pad=n=>String(n).padStart(2,"0");
 const fmtTime=ms=>{const d=new Date(ms);return pad(d.getHours())+":"+pad(d.getMinutes())};
-function dayLabel(ms){const d=new Date(ms),n=new Date();const diff=Math.round((new Date(d.getFullYear(),d.getMonth(),d.getDate())-new Date(n.getFullYear(),n.getMonth(),n.getDate()))/86400000);if(diff===0)return"сегодня";if(diff===1)return"завтра";return d.toLocaleDateString("ru-RU",{day:"numeric",month:"short"})}
+const WD=["вс","пн","вт","ср","чт","пт","сб"];
+function dayLabel(ms){const d=new Date(ms),n=new Date();const diff=Math.round((new Date(d.getFullYear(),d.getMonth(),d.getDate())-new Date(n.getFullYear(),n.getMonth(),n.getDate()))/86400000);if(diff===0)return"сегодня";if(diff===1)return"завтра";if(diff===2)return"послезавтра";return WD[d.getDay()]+", "+d.toLocaleDateString("ru-RU",{day:"numeric",month:"short"}).replace(".","")}
+const DAYS_AHEAD=14;
+function buildDays(keep){
+  const box=$("dayChips"); const prev=keep?document.querySelector('input[name="day"]:checked')?.value:null;
+  box.innerHTML=""; const n=new Date();
+  for(let i=0;i<DAYS_AHEAD;i++){
+    const d=new Date(n.getFullYear(),n.getMonth(),n.getDate()+i);
+    const l=document.createElement("label"); l.className="day"+(d.getDay()===0||d.getDay()===6?" weekend":"");
+    const inp=document.createElement("input"); inp.type="radio"; inp.name="day"; inp.value=String(i); inp.id="day"+i;
+    inp.checked=prev!=null?prev===String(i):i===0;
+    const sp=document.createElement("span"); const big=document.createElement("b"); const sm=document.createElement("small");
+    if(i===0){big.textContent="Сегодня";sm.textContent=WD[d.getDay()]+", "+d.getDate()}
+    else if(i===1){big.textContent="Завтра";sm.textContent=WD[d.getDay()]+", "+d.getDate()}
+    else{big.textContent=String(d.getDate());sm.textContent=WD[d.getDay()]+(d.getDate()===1||i===2?" · "+d.toLocaleDateString("ru-RU",{month:"short"}).replace(".",""):"")}
+    sp.append(big,sm); l.append(inp,sp); box.append(l);
+  }
+}
+buildDays(false);
 function plural(n,a,b,c){n=Math.abs(n)%100;const n1=n%10;if(n>10&&n<20)return c;if(n1>1&&n1<5)return b;if(n1===1)return a;return c}
 function statusOf(w,now){const end=w.startAt+w.duration*60000;if(now>=w.startAt&&now<end)return{live:true,text:"идёт сейчас"};const m=Math.round((w.startAt-now)/60000);if(m<60)return{live:false,text:"через "+m+" "+plural(m,"минуту","минуты","минут")};const h=Math.floor(m/60),mm=m%60;if(h<24)return{live:false,text:"через "+h+" ч"+(mm?" "+mm+" мин":"")};return{live:false,text:dayLabel(w.startAt)}}
 function hashIdx(s,n){let h=0;for(const c of s)h=(h*31+c.charCodeAt(0))>>>0;return h%n}
@@ -306,7 +330,8 @@ async function lookupAddr(){
 }
 function pinIcon(w,count,live,mine,sel){
   const cls="pin"+(live?" live":"")+(mine?" mine":"")+(sel?" sel":"");
-  return L.divIcon({className:"pin-wrap",iconSize:[0,0],html:'<div class="'+cls+'">'+fmtTime(w.startAt)+(count>1?'<span class="n">'+count+'</span>':"")+"</div>"});
+  const dl=dayLabel(w.startAt), pre=dl==="сегодня"?"":(dl==="завтра"?"завтра ":WD[new Date(w.startAt).getDay()]+" ");
+  return L.divIcon({className:"pin-wrap",iconSize:[0,0],html:'<div class="'+cls+'">'+pre+fmtTime(w.startAt)+(count>1?'<span class="n">'+count+'</span>':"")+"</div>"});
 }
 function locate(fly){
   if(!navigator.geolocation){toast("Геолокация недоступна в этом браузере");return}
@@ -446,6 +471,7 @@ function writeErr(e){
 // ---------- form ----------
 function openForm(){
   if(!pick) return;
+  buildDays(true);
   $("modal").hidden=false;
   if(!$("time").value) $("time").value=defaultTime();
   if(!$("place").value&&pick.label) $("place").value=pick.label;
@@ -466,14 +492,14 @@ $("walkForm").addEventListener("submit",async ev=>{
   if(!pick){showErr("Сначала выбери место на карте.");return}
   if(!f.place){showErr("Напиши, где встречаемся.");$("place").focus();return}
   if(!f.startAt){showErr("Укажи время.");$("time").focus();return}
-  if(f.startAt+f.duration*60000<Date.now()){showErr("Это время уже прошло. Выбери позже или «Завтра».");return}
+  if(f.startAt+f.duration*60000<Date.now()){showErr("Это время уже прошло. Выбери время позже или другой день.");return}
   if(!db||!myId){showErr("Сохранение сейчас недоступно.");return}
   const btn=$("publishBtn"); btn.disabled=true;
   try{
     const doc={authorId:myId,place:f.place,lat:pick.lat,lng:pick.lng,startAt:f.startAt,duration:f.duration,mood:f.mood,note:f.note,createdAt:Date.now()};
     if(aiRoute&&aiRoute.length) doc.route=aiRoute;
     const ref=await db.collection("walks").add(doc);
-    $("walkForm").reset(); $("dayToday").checked=true; $("dur45").checked=true; $("mood0").checked=true; $("time").value="";
+    $("walkForm").reset(); buildDays(false); $("dur45").checked=true; $("mood0").checked=true; $("time").value="";
     aiRoute=null; $("aiBox").hidden=true; closeForm(); clearPick();
     if(ref&&ref.id){selectedId=ref.id}
     render(); toast("Готово! Твоя прогулка на карте.");
