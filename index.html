@@ -272,7 +272,7 @@ const hasPt=w=>typeof w.lat==="number"&&typeof w.lng==="number";
 // ---------- map ----------
 function initMap(center){
   map=L.map("map",{zoomControl:false,attributionControl:true}).setView(center,15);
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",{maxZoom:19,subdomains:"abcd",attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'}).addTo(map);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(map);
   map.on("click",e=>setPick(e.latlng));
 }
 const pickIcon=L.divIcon({className:"pin-wrap",iconSize:[0,0],html:'<div class="pick"><svg width="36" height="46" viewBox="0 0 36 46"><path d="M18 45s15-13.5 15-26A15 15 0 0 0 3 19c0 12.5 15 26 15 26z" fill="#F3C24B" stroke="#16261F" stroke-width="2.5"/><circle cx="18" cy="18" r="5.5" fill="#16261F"/></svg></div>'});
