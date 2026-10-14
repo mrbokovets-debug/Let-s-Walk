@@ -749,6 +749,17 @@ function card(w,byWalk,now){
   li.append(stub,b); return li;
 }
 
+// Fit the map so every upcoming walk nearby is on screen (and you, if we know where you are)
+function showNearbyWalks(){
+  const now=Date.now(), c=map.getCenter();
+  const pts=walks.filter(w=>hasPt(w)&&w.startAt+w.duration*60000>now&&!blocked.has(w.authorId))
+    .map(w=>L.latLng(w.lat,w.lng)).filter(p=>p.distanceTo(c)<25000);
+  if(!pts.length) return;
+  if(myLoc) pts.push(L.latLng(myLoc));
+  const sheetH=$("sheet").offsetHeight||140;
+  map.fitBounds(L.latLngBounds(pts),{paddingTopLeft:[40,100],paddingBottomRight:[40,sheetH+40],maxZoom:16,animate:false});
+}
+
 // ---------- data (Supabase) ----------
 function errText(e){
   const m=(e&&(e.message||e.error_description))||"";
@@ -788,10 +799,15 @@ async function reload(){
 let rlTimer=null;
 const reloadSoon=()=>{clearTimeout(rlTimer);rlTimer=setTimeout(reload,250)};
 function subscribeLive(){
-  const ch=sb.channel("lets-walk-live",{config:{presence:{key:myId||("guest-"+Math.random().toString(36).slice(2,9))}}});
+  const myKey=myId||("guest-"+Math.random().toString(36).slice(2,9));
+  const ch=sb.channel("lets-walk-live",{config:{presence:{key:myKey}}});
   ch.on("postgres_changes",{event:"*",schema:"public",table:"walks"},reloadSoon)
     .on("postgres_changes",{event:"*",schema:"public",table:"walk_participants"},reloadSoon)
-    .on("presence",{event:"sync"},()=>{const n=Object.keys(ch.presenceState()).length;$("online").hidden=!n;$("onlineText").textContent="онлайн "+n})
+    .on("presence",{event:"sync"},()=>{
+      // count other people only; hide when it's just you
+      const others=Object.keys(ch.presenceState()).filter(k=>k!==myKey&&k!==myId).length;
+      $("online").hidden=!others; $("onlineText").textContent="ещё "+others+" онлайн";
+    })
     .subscribe(s=>{if(s==="SUBSCRIBED") ch.track({at:Date.now()})});
 }
 async function toggleJoin(w,iJoined,btn){
@@ -1054,7 +1070,7 @@ function getStartCenter(){
   await applySession(s);
   sb.auth.onAuthStateChange((evt,s2)=>{if(evt==="TOKEN_REFRESHED")session=s2});
   await reload();
-  openFromHash();
+  if(/^#w-/.test(location.hash)) openFromHash(); else showNearbyWalks();
   subscribeLive();
   document.addEventListener("visibilitychange",()=>{if(!document.hidden)reload()});
 })();
