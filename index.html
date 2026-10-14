@@ -312,15 +312,6 @@ textarea.input{resize:vertical;min-height:60px}
       <input class="input" id="time" type="time" step="300" style="max-width:200px">
     </div>
     <div class="field">
-      <span class="label">Сколько гуляем</span>
-      <div class="chips" role="radiogroup">
-        <label class="chip"><input type="radio" name="dur" id="dur30" value="30"><span>30 мин</span></label>
-        <label class="chip"><input type="radio" name="dur" id="dur45" value="45" checked><span>45 мин</span></label>
-        <label class="chip"><input type="radio" name="dur" id="dur60" value="60"><span>1 час</span></label>
-        <label class="chip"><input type="radio" name="dur" id="dur90" value="90"><span>1,5 часа</span></label>
-      </div>
-    </div>
-    <div class="field">
       <span class="label">Настроение</span>
       <div class="chips" role="radiogroup" id="moodChips"></div>
     </div>
@@ -692,7 +683,7 @@ const SITE_URL="https://mrbokovets-debug.github.io/Let-s-Walk/";
 const walkUrl=id=>SITE_URL+"#w-"+id;
 function shareText(w){
   const dl=dayLabel(w.startAt);
-  return "Пошли гулять! "+(w.place||"Точка на карте")+", "+dl+" в "+fmtTime(w.startAt)+", "+w.duration+" мин"+(w.mood?" · "+w.mood:"")+". Присоединяйся:";
+  return "Пошли гулять! "+(w.place||"Точка на карте")+", "+dl+" в "+fmtTime(w.startAt)+(w.mood?" · "+w.mood:"")+". Присоединяйся:";
 }
 async function shareWalk(w){
   const url=walkUrl(w.id), text=shareText(w);
@@ -878,9 +869,11 @@ async function cancelWalk(w){
 }
 
 // ---------- create / edit walk ----------
-let editId=null,editPt=null;
+// How long a walk stays "on" after its start time; not asked in the form
+const DEFAULT_DURATION=60;
+let editId=null,editPt=null,editDuration=null;
 function resetForm(){
-  $("walkForm").reset(); buildDays(false); $("dur45").checked=true; $("mood0").checked=true; $("time").value="";
+  $("walkForm").reset(); buildDays(false); $("mood0").checked=true; editDuration=null; $("time").value="";
   editId=null; editPt=null;
 }
 function dayOffset(ms){const d=new Date(ms),n=new Date();return Math.round((new Date(d.getFullYear(),d.getMonth(),d.getDate())-new Date(n.getFullYear(),n.getMonth(),n.getDate()))/86400000)}
@@ -891,7 +884,7 @@ function startEdit(w){
   const off=Math.min(Math.max(dayOffset(w.startAt),0),DAYS_AHEAD-1);
   const dr=$("day"+off); if(dr) dr.checked=true;
   $("time").value=fmtTime(w.startAt);
-  const du=$("dur"+w.duration); if(du) du.checked=true;
+  editDuration=w.duration;
   document.querySelectorAll('input[name="mood"]').forEach(r=>r.checked=r.value===w.mood);
   $("wnote").value=w.note||"";
   openForm();
@@ -921,7 +914,7 @@ function showErr(m){$("formErr").textContent=m;$("formErr").hidden=!m}
 function readForm(){
   const day=+document.querySelector('input[name="day"]:checked').value, time=$("time").value;
   let startAt=null; if(time){const [h,m]=time.split(":").map(Number);const d=new Date();d.setDate(d.getDate()+day);d.setHours(h,m,0,0);startAt=d.getTime()}
-  return{place:$("place").value.trim(),startAt,duration:+document.querySelector('input[name="dur"]:checked').value,mood:document.querySelector('input[name="mood"]:checked')?.value||"",note:$("wnote").value.trim()};
+  return{place:$("place").value.trim(),startAt,duration:editDuration||DEFAULT_DURATION,mood:document.querySelector('input[name="mood"]:checked')?.value||"",note:$("wnote").value.trim()};
 }
 function describeChanges(old,f,pt){
   const ch=[];
