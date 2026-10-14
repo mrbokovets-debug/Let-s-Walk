@@ -1,0 +1,509 @@
+<title>Пошли гулять</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Golos+Text:wght@400;500;600&display=swap">
+<style>
+/* Layout: one narrow mobile-first column — big start button, inline compose sheet, live feed of walks as tickets with a time stub */
+:root{
+  --bg:#EAF0EC;
+  --surface:#FBFDFB;
+  --ink:#16261F;
+  --muted:#5A6C63;
+  --line:#D2DDD6;
+  --leaf:#1E6B4E;
+  --leaf-ink:#FFFFFF;
+  --leaf-soft:#D6EADF;
+  --sun:#F3C24B;
+  --sun-ink:#2B2206;
+  --live:#D9482B;
+  --danger:#B3361F;
+  --shadow:0 1px 2px rgba(22,38,31,.06),0 6px 20px rgba(22,38,31,.06);
+  --display:"Unbounded","Arial Black",system-ui,sans-serif;
+  --body:"Golos Text",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0F1814;--surface:#16231D;--ink:#E5EEE8;--muted:#93A79C;--line:#2A3B33;
+  --leaf:#5CC596;--leaf-ink:#0B1A13;--leaf-soft:#1D3A2D;--sun:#F3C24B;--sun-ink:#2B2206;
+  --live:#FF7A5C;--danger:#FF8A70;--shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.25);color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0F1814;--surface:#16231D;--ink:#E5EEE8;--muted:#93A79C;--line:#2A3B33;
+  --leaf:#5CC596;--leaf-ink:#0B1A13;--leaf-soft:#1D3A2D;--sun:#F3C24B;--sun-ink:#2B2206;
+  --live:#FF7A5C;--danger:#FF8A70;--shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.25);color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.app{max-width:560px;margin:0 auto;padding-block:16px 48px;display:flex;flex-direction:column;gap:20px}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--sun);outline-offset:2px}
+
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.brand{font-family:var(--display);font-weight:700;font-size:17px;letter-spacing:-.01em;display:flex;align-items:center;gap:8px}
+.brand svg{flex:none}
+.online{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.online .dot{width:8px;height:8px;border-radius:50%;background:var(--leaf);box-shadow:0 0 0 3px var(--leaf-soft)}
+.avs{display:flex}
+.avs img{width:24px;height:24px;border-radius:50%;border:2px solid var(--bg);margin-left:-6px;background:var(--line)}
+.avs img:first-child{margin-left:0}
+
+.hero{background:var(--leaf);color:var(--leaf-ink);border-radius:22px;padding:22px 20px 20px;display:flex;flex-direction:column;gap:14px;position:relative;overflow:hidden}
+.hero h1{font-family:var(--display);font-weight:700;font-size:clamp(26px,7vw,34px);line-height:1.08;margin:0;text-wrap:balance;letter-spacing:-.02em;max-width:14ch}
+.hero p{margin:0;opacity:.85;max-width:36ch}
+.hero .path{position:absolute;right:-10px;top:-6px;width:150px;height:150px;opacity:.28;pointer-events:none}
+.go{align-self:flex-start;border:0;border-radius:999px;background:var(--sun);color:var(--sun-ink);font-family:var(--display);font-weight:700;font-size:16px;padding:14px 22px;display:flex;align-items:center;gap:10px;transition:transform .15s}
+.go:hover{transform:translateY(-1px)}
+.go:active{transform:translateY(1px)}
+
+.note{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;font-size:14px;color:var(--muted)}
+
+/* compose sheet */
+.sheet{background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:18px;display:flex;flex-direction:column;gap:16px}
+.sheet h2{font-family:var(--display);font-weight:500;font-size:18px;margin:0}
+.field{display:flex;flex-direction:column;gap:6px}
+.label{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.input{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:11px 12px}
+textarea.input{resize:vertical;min-height:64px}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.row>.field{flex:1 1 140px;min-width:0}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{position:relative}
+.chip input{position:absolute;opacity:0;inset:0;width:100%;height:100%;margin:0;cursor:pointer}
+.chip span{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:7px 13px;font-size:14px;background:var(--bg);transition:background .15s,border-color .15s}
+.chip input:checked+span{background:var(--leaf);border-color:var(--leaf);color:var(--leaf-ink)}
+.chip input:focus-visible+span{outline:3px solid var(--sun);outline-offset:2px}
+.hint{font-size:13px;color:var(--muted)}
+.ghost{border:1px solid var(--line);background:transparent;border-radius:999px;padding:9px 14px;font-weight:500}
+.ghost:hover{border-color:var(--leaf)}
+.primary{border:0;background:var(--leaf);color:var(--leaf-ink);border-radius:999px;padding:12px 18px;font-weight:600}
+.primary:disabled{opacity:.55;cursor:default}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.ai-box{border:1px dashed var(--leaf);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;background:var(--leaf-soft)}
+.ai-box h3{margin:0;font-size:15px;font-weight:600}
+.ai-box ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:2px}
+.err{color:var(--danger);font-size:14px}
+
+/* feed */
+.feed-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.feed-head h2{font-family:var(--display);font-weight:500;font-size:19px;margin:0}
+.count{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.list{display:flex;flex-direction:column;gap:12px;list-style:none;margin:0;padding:0}
+.empty{text-align:center;padding:28px 16px;border:1.5px dashed var(--line);border-radius:18px;color:var(--muted);display:flex;flex-direction:column;gap:6px;align-items:center}
+.empty strong{color:var(--ink);font-weight:600}
+
+.walk{background:var(--surface);border-radius:18px;box-shadow:var(--shadow);display:grid;grid-template-columns:78px 1fr;overflow:hidden}
+.stub{background:var(--leaf-soft);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:12px 6px;border-right:2px dashed var(--bg);text-align:center}
+.stub .t{font-family:var(--display);font-weight:700;font-size:18px;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.stub .d{font-size:12px;color:var(--muted)}
+.wbody{padding:14px 14px 14px 14px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.wtop{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pill{font-size:12px;font-weight:600;border-radius:999px;padding:3px 9px;background:var(--bg);color:var(--muted)}
+.pill.live{background:var(--live);color:#fff}
+.pill.mood{background:var(--sun);color:var(--sun-ink)}
+.place{font-weight:600;font-size:16px;line-height:1.3;overflow-wrap:anywhere}
+.meta{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.wnote{font-size:14px;overflow-wrap:anywhere}
+.route{margin:0;padding-left:18px;font-size:13px;color:var(--muted)}
+.task{font-size:13px;border-left:3px solid var(--sun);padding:2px 0 2px 9px}
+.people{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.people .avs img{width:28px;height:28px}
+.people .names{font-size:13px;color:var(--muted);min-width:0}
+.wact{display:flex;gap:8px;flex-wrap:wrap;margin-top:2px}
+.join{border:0;border-radius:999px;padding:9px 16px;font-weight:600;background:var(--leaf);color:var(--leaf-ink)}
+.join.on{background:transparent;color:var(--leaf);box-shadow:inset 0 0 0 1.5px var(--leaf)}
+.cancel{border:0;background:transparent;color:var(--danger);font-weight:500;padding:9px 6px}
+.cancel.confirm{background:var(--danger);color:#fff;border-radius:999px;padding:9px 14px}
+
+.safety{font-size:13px;color:var(--muted);display:flex;gap:10px;align-items:flex-start}
+.safety svg{flex:none;margin-top:2px}
+
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-size:14px;max-width:calc(100% - 32px);z-index:5}
+
+@media (max-width:380px){.walk{grid-template-columns:64px 1fr}.stub .t{font-size:16px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="12" fill="var(--leaf)"/><path d="M7 18c3-1 3-5 6-6s4-4 6-5" stroke="var(--sun)" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-dasharray="2 3"/></svg>
+      Пошли гулять
+    </div>
+    <div class="online" id="online" hidden><span class="dot"></span><span id="onlineText"></span><span class="avs" id="onlineAvs"></span></div>
+  </header>
+
+  <section class="hero">
+    <svg class="path" viewBox="0 0 150 150" aria-hidden="true"><path d="M10 140 C 40 100, 30 70, 70 60 S 120 30, 140 8" stroke="currentColor" stroke-width="6" fill="none" stroke-linecap="round" stroke-dasharray="2 12"/></svg>
+    <h1>Есть полчаса? Пошли гулять.</h1>
+    <p>Скажи, где и когда, и друзья увидят твою прогулку и смогут присоединиться.</p>
+    <button class="go" id="startBtn" type="button">
+      <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 4a2 2 0 1 0 0 .01M10 21l2-6 2 2v4M8 12l3-4 3 2 3 1M11 8l-1 5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Пошли гулять
+    </button>
+  </section>
+
+  <div class="note" id="roNote" hidden></div>
+
+  <form class="sheet" id="walkForm" hidden novalidate>
+    <h2>Новая прогулка</h2>
+    <div class="field">
+      <label class="label" for="place">Где встречаемся</label>
+      <input class="input" id="place" maxlength="90" placeholder="Например: парк у реки, вход с главной аллеи" autocomplete="off">
+    </div>
+    <div class="row">
+      <div class="field">
+        <span class="label">День</span>
+        <div class="chips" role="radiogroup">
+          <label class="chip"><input type="radio" name="day" id="dayToday" value="0" checked><span>Сегодня</span></label>
+          <label class="chip"><input type="radio" name="day" id="dayTomorrow" value="1"><span>Завтра</span></label>
+        </div>
+      </div>
+      <div class="field">
+        <label class="label" for="time">Во сколько</label>
+        <input class="input" id="time" type="time" step="300">
+      </div>
+    </div>
+    <div class="field">
+      <span class="label">Сколько гуляем</span>
+      <div class="chips" role="radiogroup" id="durChips">
+        <label class="chip"><input type="radio" name="dur" id="dur30" value="30"><span>30 мин</span></label>
+        <label class="chip"><input type="radio" name="dur" id="dur45" value="45" checked><span>45 мин</span></label>
+        <label class="chip"><input type="radio" name="dur" id="dur60" value="60"><span>1 час</span></label>
+        <label class="chip"><input type="radio" name="dur" id="dur90" value="90"><span>1,5 часа</span></label>
+      </div>
+    </div>
+    <div class="field">
+      <span class="label">Настроение</span>
+      <div class="chips" role="radiogroup" id="moodChips"></div>
+    </div>
+    <div class="field">
+      <label class="label" for="wnote">Пара слов (необязательно)</label>
+      <textarea class="input" id="wnote" maxlength="140" placeholder="Возьму термос с чаем. Кто со мной?"></textarea>
+    </div>
+
+    <div class="actions">
+      <button class="ghost" type="button" id="aiBtn">Подсказать маршрут</button>
+      <span class="hint" id="aiHint">Claude предложит маршрут по месту, времени и настроению.</span>
+    </div>
+    <div class="ai-box" id="aiBox" hidden></div>
+
+    <div class="err" id="formErr" hidden></div>
+    <div class="actions">
+      <button class="primary" type="submit" id="publishBtn">Опубликовать прогулку</button>
+      <button class="ghost" type="button" id="closeForm">Отмена</button>
+    </div>
+  </form>
+
+  <section style="display:flex;flex-direction:column;gap:12px">
+    <div class="feed-head"><h2>Кто идёт гулять</h2><span class="count" id="count"></span></div>
+    <ul class="list" id="list"></ul>
+    <div class="empty" id="empty">
+      <strong id="emptyTitle">Загружаем прогулки…</strong>
+      <span id="emptyText">Здесь появятся прогулки, которые создают друзья.</span>
+    </div>
+  </section>
+
+  <div class="safety">
+    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" stroke="var(--leaf)" stroke-width="2" fill="none"/></svg>
+    <span>Встречайтесь в людных местах и говорите близким, куда идёте. Это прототип: прогулки видят все, у кого есть ссылка.</span>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const MOODS = ["Спокойно","Активно","С кофе","К воде","С собакой","Фото-прогулка"];
+const TASKS = [
+  "Найдите самую старую дверь на пути",
+  "Сфотографируйте что-нибудь жёлтое",
+  "Пройдите улицей, где ещё ни разу не были",
+  "Найдите место с лучшим видом и постойте там минуту",
+  "Посчитайте всех встреченных собак",
+  "Купите что-нибудь у уличного продавца",
+  "Найдите самое необычное дерево",
+  "Сделайте общее фото на фоне заката или фонаря"
+];
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "");
+
+let db = null, user = null, room = null, sample = null;
+let myId = null, canWrite = null;
+let walks = [], joins = [];
+let loaded = false, aiRoute = null;
+const confirming = new Set();
+
+// mood chips
+$("moodChips").innerHTML = "";
+MOODS.forEach((m,i)=>{
+  const l = document.createElement("label"); l.className="chip";
+  const inp = document.createElement("input"); inp.type="radio"; inp.name="mood"; inp.value=m; inp.id="mood"+i; if(i===0) inp.checked=true;
+  const sp = document.createElement("span"); sp.textContent=m;
+  l.append(inp,sp); $("moodChips").append(l);
+});
+
+function defaultTime(){
+  const d = new Date(Date.now()+30*60000);
+  d.setMinutes(Math.ceil(d.getMinutes()/15)*15,0,0);
+  return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+}
+function toast(msg){
+  const t=$("toast"); t.textContent=msg; t.hidden=false;
+  clearTimeout(toast._t); toast._t=setTimeout(()=>t.hidden=true,2600);
+}
+function fmtTime(ms){const d=new Date(ms);return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0")}
+function dayLabel(ms){
+  const d=new Date(ms), n=new Date();
+  const a=new Date(d.getFullYear(),d.getMonth(),d.getDate()), b=new Date(n.getFullYear(),n.getMonth(),n.getDate());
+  const diff=Math.round((a-b)/86400000);
+  if(diff===0) return "сегодня"; if(diff===1) return "завтра"; if(diff===-1) return "вчера";
+  return d.toLocaleDateString("ru-RU",{day:"numeric",month:"short"});
+}
+function plural(n,a,b,c){n=Math.abs(n)%100;const n1=n%10;if(n>10&&n<20)return c;if(n1>1&&n1<5)return b;if(n1===1)return a;return c}
+function statusOf(w,now){
+  const end=w.startAt+w.duration*60000;
+  if(now>=w.startAt&&now<end) return {live:true,text:"идёт сейчас"};
+  const m=Math.round((w.startAt-now)/60000);
+  if(m<60) return {live:false,text:"через "+m+" "+plural(m,"минуту","минуты","минут")};
+  const h=Math.floor(m/60), mm=m%60;
+  if(h<24) return {live:false,text:"через "+h+" ч"+(mm?" "+mm+" мин":"")};
+  return {live:false,text:dayLabel(w.startAt)};
+}
+function hashIdx(s,n){let h=0;for(const c of s)h=(h*31+c.charCodeAt(0))>>>0;return h%n}
+
+// ---------- render ----------
+let renderSeq=0;
+async function render(){
+  const seq=++renderSeq;
+  const now=Date.now();
+  const upcoming=walks.filter(w=>w.startAt+w.duration*60000>now).sort((a,b)=>a.startAt-b.startAt);
+  const byWalk={};
+  joins.forEach(j=>{(byWalk[j.walkId]=byWalk[j.walkId]||[]).push(j.userId)});
+  const ids=new Set();
+  upcoming.forEach(w=>{ids.add(w.authorId);(byWalk[w.id]||[]).forEach(u=>ids.add(u))});
+  let ps={};
+  if(user&&ids.size){try{ps=await user.profiles([...ids])}catch(e){ps={}}}
+  if(seq!==renderSeq) return;
+
+  const list=$("list"); list.innerHTML="";
+  $("count").textContent=upcoming.length?upcoming.length+" "+plural(upcoming.length,"прогулка","прогулки","прогулок"):"";
+  const empty=$("empty");
+  if(!upcoming.length){
+    empty.hidden=false;
+    if(!db&&loaded){$("emptyTitle").textContent="Онлайн сейчас недоступен";$("emptyText").textContent="Открой страницу, войдя в свой аккаунт Claude, чтобы видеть прогулки друзей."}
+    else if(loaded){$("emptyTitle").textContent="Пока никто не идёт гулять";$("emptyText").textContent="Нажми «Пошли гулять», и твоя прогулка появится здесь у всех."}
+    return;
+  }
+  empty.hidden=true;
+
+  for(const w of upcoming){
+    const st=statusOf(w,now);
+    const li=document.createElement("li"); li.className="walk";
+    const stub=document.createElement("div"); stub.className="stub";
+    const t=document.createElement("div"); t.className="t"; t.textContent=fmtTime(w.startAt);
+    const d=document.createElement("div"); d.className="d"; d.textContent=dayLabel(w.startAt);
+    stub.append(t,d);
+
+    const body=document.createElement("div"); body.className="wbody";
+    const top=document.createElement("div"); top.className="wtop";
+    const p1=document.createElement("span"); p1.className="pill"+(st.live?" live":""); p1.textContent=st.text;
+    top.append(p1);
+    if(w.mood){const p2=document.createElement("span");p2.className="pill mood";p2.textContent=w.mood;top.append(p2)}
+    const place=document.createElement("div"); place.className="place"; place.textContent=esc(w.place);
+    const km=(w.duration/60*4.5).toFixed(1).replace(".",",");
+    const steps=Math.round(w.duration*110/100)*100;
+    const meta=document.createElement("div"); meta.className="meta";
+    meta.textContent=w.duration+" мин · ≈ "+km+" км · ~"+steps.toLocaleString("ru-RU")+" шагов";
+    body.append(top,place,meta);
+    if(w.note){const n=document.createElement("div");n.className="wnote";n.textContent=esc(w.note);body.append(n)}
+    if(Array.isArray(w.route)&&w.route.length){
+      const ol=document.createElement("ol"); ol.className="route";
+      w.route.slice(0,6).forEach(s=>{const x=document.createElement("li");x.textContent=esc(s);ol.append(x)});
+      body.append(ol);
+    }
+    const task=document.createElement("div"); task.className="task";
+    task.textContent="Задание прогулки: "+TASKS[hashIdx(w.id,TASKS.length)];
+    body.append(task);
+
+    // people
+    const goers=[w.authorId,...(byWalk[w.id]||[]).filter(u=>u!==w.authorId)];
+    const people=document.createElement("div"); people.className="people";
+    const avs=document.createElement("span"); avs.className="avs";
+    goers.slice(0,6).forEach(u=>{const im=document.createElement("img");im.alt="";im.src=ps[u]?.avatarUrl||"";avs.append(im)});
+    const names=document.createElement("span"); names.className="names";
+    const nm=u=>u===myId?"ты":(ps[u]?.name||"Кто-то");
+    const author=nm(w.authorId);
+    const others=goers.slice(1);
+    names.textContent=(w.authorId===myId?"Ты зовёшь":author+" зовёт")+(others.length?" · идут: "+others.map(nm).join(", "):" · пока без компании");
+    people.append(avs,names);
+    body.append(people);
+
+    // actions
+    const act=document.createElement("div"); act.className="wact";
+    const iJoined=(byWalk[w.id]||[]).includes(myId);
+    if(myId&&w.authorId!==myId&&canWrite!==false){
+      const b=document.createElement("button"); b.type="button"; b.className="join"+(iJoined?" on":"");
+      b.textContent=iJoined?"Я не смогу":"Я с вами";
+      b.onclick=()=>toggleJoin(w,iJoined,b);
+      act.append(b);
+    }
+    if(myId&&w.authorId===myId){
+      const c=document.createElement("button"); c.type="button";
+      const conf=confirming.has(w.id);
+      c.className="cancel"+(conf?" confirm":"");
+      c.textContent=conf?"Точно отменить?":"Отменить прогулку";
+      c.onclick=()=>cancelWalk(w);
+      act.append(c);
+      if(conf){const k=document.createElement("button");k.type="button";k.className="ghost";k.textContent="Нет";k.onclick=()=>{confirming.delete(w.id);render()};act.append(k)}
+    }
+    if(act.childElementCount) body.append(act);
+    li.append(stub,body); list.append(li);
+  }
+}
+
+// ---------- actions ----------
+async function toggleJoin(w,iJoined,btn){
+  if(!db||!myId) return;
+  btn.disabled=true;
+  const ref=db.collection("joins").doc(w.id+"~"+myId);
+  try{
+    if(iJoined){await ref.delete();toast("Ты больше не идёшь")}
+    else{await ref.set({walkId:w.id,userId:myId,at:Date.now()});toast("Отлично, ты идёшь гулять!")}
+  }catch(e){handleWriteError(e)}
+  btn.disabled=false;
+}
+async function cancelWalk(w){
+  if(!confirming.has(w.id)){confirming.add(w.id);render();return}
+  confirming.delete(w.id);
+  try{
+    await db.collection("walks").doc(w.id).delete();
+    const js=joins.filter(j=>j.walkId===w.id);
+    for(const j of js){try{await db.collection("joins").doc(j._id).delete()}catch(e){}}
+    toast("Прогулка отменена");
+  }catch(e){handleWriteError(e)}
+}
+function handleWriteError(e){
+  if(e&&e.code==="invalid_argument"){canWrite=false;applyWriteState();toast("Не получилось сохранить: у тебя доступ только на просмотр")}
+  else if(e&&e.code==="quota_exceeded"){toast("Место для прогулок закончилось. Удали старые прогулки.")}
+  else toast("Не получилось сохранить. Попробуй ещё раз.");
+}
+
+function applyWriteState(){
+  const ro=$("roNote");
+  if(!db){ro.hidden=false;ro.textContent="Чтобы создавать прогулки и присоединяться, открой эту страницу, войдя в аккаунт Claude.";$("startBtn").disabled=true;return}
+  if(canWrite===false||!myId){
+    ro.hidden=false;
+    ro.textContent="Ты видишь прогулки, но пока не можешь создавать их и присоединяться. Попроси автора страницы пригласить тебя по email с правом редактирования.";
+    $("startBtn").disabled=true; $("walkForm").hidden=true;
+  } else {ro.hidden=true;$("startBtn").disabled=false}
+}
+
+// ---------- form ----------
+$("startBtn").onclick=()=>{
+  const f=$("walkForm"); f.hidden=false;
+  if(!$("time").value) $("time").value=defaultTime();
+  $("place").focus();
+  f.scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth",block:"start"});
+};
+$("closeForm").onclick=()=>{$("walkForm").hidden=true;$("formErr").hidden=true};
+
+function readForm(){
+  const place=$("place").value.trim();
+  const day=+document.querySelector('input[name="day"]:checked').value;
+  const time=$("time").value;
+  const duration=+document.querySelector('input[name="dur"]:checked').value;
+  const mood=document.querySelector('input[name="mood"]:checked')?.value||"";
+  const note=$("wnote").value.trim();
+  let startAt=null;
+  if(time){const [h,m]=time.split(":").map(Number);const d=new Date();d.setDate(d.getDate()+day);d.setHours(h,m,0,0);startAt=d.getTime()}
+  return {place,startAt,duration,mood,note};
+}
+function showErr(msg){const e=$("formErr");e.textContent=msg;e.hidden=!msg}
+
+$("walkForm").addEventListener("submit",async ev=>{
+  ev.preventDefault();
+  const f=readForm();
+  if(!f.place){showErr("Напиши, где встречаемся.");$("place").focus();return}
+  if(!f.startAt){showErr("Укажи время прогулки.");$("time").focus();return}
+  if(f.startAt+f.duration*60000<Date.now()){showErr("Это время уже прошло. Выбери время позже или «Завтра».");return}
+  showErr("");
+  if(!db||!myId){showErr("Онлайн недоступен: войди в аккаунт Claude.");return}
+  const btn=$("publishBtn"); btn.disabled=true;
+  try{
+    const doc={authorId:myId,place:f.place,startAt:f.startAt,duration:f.duration,mood:f.mood,note:f.note,createdAt:Date.now()};
+    if(aiRoute&&aiRoute.length) doc.route=aiRoute;
+    await db.collection("walks").add(doc);
+    $("walkForm").reset(); $("dayToday").checked=true; $("dur45").checked=true; $("mood0").checked=true;
+    $("time").value=""; aiRoute=null; $("aiBox").hidden=true;
+    $("walkForm").hidden=true;
+    toast("Прогулка опубликована. Друзья уже видят её.");
+  }catch(e){handleWriteError(e)}
+  btn.disabled=false;
+});
+
+// ---------- route suggestion (Claude) ----------
+$("aiBtn").onclick=async()=>{
+  const f=readForm(); const box=$("aiBox");
+  if(!f.place){showErr("Сначала напиши район или место, откуда начнёте.");$("place").focus();return}
+  showErr("");
+  if(!sample){box.hidden=false;box.innerHTML="";const p=document.createElement("div");p.className="hint";p.textContent="Подсказки маршрута недоступны в этом просмотре.";box.append(p);return}
+  box.hidden=false; box.innerHTML=""; const wait=document.createElement("div"); wait.className="hint"; wait.textContent="Claude придумывает маршрут…"; box.append(wait);
+  $("aiBtn").disabled=true;
+  try{
+    const prompt="Ты помогаешь спланировать пешую прогулку. Старт: «"+f.place+"». Длительность: "+f.duration+" минут. Настроение: "+f.mood+"."+(f.note?" Пожелание: "+f.note:"")+
+      "\nПредложи кольцевой или линейный маршрут из 3–5 точек, реально подходящий по времени (скорость около 4,5 км/ч). Если место неизвестно, предложи типовые точки для такого места. Пиши по-русски, коротко."+
+      "\nОтветь ТОЛЬКО JSON: {\"title\": \"короткое название маршрута\", \"stops\": [\"точка 1 — что там делать\", ...], \"tip\": \"один короткий совет\"}";
+    const r=await sample.json(prompt,{modelTier:"quick"});
+    const stops=Array.isArray(r?.stops)?r.stops.map(s=>String(s).slice(0,120)).slice(0,5):[];
+    box.innerHTML="";
+    const h=document.createElement("h3"); h.textContent=String(r?.title||"Маршрут").slice(0,80);
+    const ol=document.createElement("ol"); stops.forEach(s=>{const li=document.createElement("li");li.textContent=s;ol.append(li)});
+    box.append(h,ol);
+    if(r?.tip){const tp=document.createElement("div");tp.className="hint";tp.textContent=String(r.tip).slice(0,160);box.append(tp)}
+    const acts=document.createElement("div"); acts.className="actions";
+    const use=document.createElement("button"); use.type="button"; use.className="primary"; use.textContent="Добавить маршрут к прогулке";
+    use.onclick=()=>{aiRoute=stops;use.textContent="Маршрут добавлен";use.disabled=true};
+    const again=document.createElement("button"); again.type="button"; again.className="ghost"; again.textContent="Другой вариант";
+    again.onclick=()=>$("aiBtn").click();
+    acts.append(use,again); box.append(acts);
+  }catch(e){
+    box.innerHTML=""; const p=document.createElement("div"); p.className="err";
+    p.textContent=e?.code==="not_granted"?"Без разрешения Claude не может подсказать маршрут.":e?.code==="rate_limited"?"Слишком много запросов. Попробуй через минуту.":"Не получилось придумать маршрут. Попробуй ещё раз.";
+    box.append(p);
+    if(e?.code==="not_granted"){$("aiBtn").hidden=true;$("aiHint").hidden=true}
+  }
+  $("aiBtn").disabled=false;
+};
+
+// ---------- boot ----------
+(async()=>{
+  const c=window.claude;
+  if(!c||!c.use){loaded=true;db=null;applyWriteState();render();return}
+  [db,user]=await Promise.all([c.use("db"),c.use("user")]);
+  c.use("sample").then(s=>{sample=s;if(!s){$("aiBtn").hidden=true;$("aiHint").hidden=true}});
+  if(user){myId=await user.id();canWrite=await user.can("data.write")}
+  applyWriteState();
+  if(!db){loaded=true;render();return}
+  db.collection("walks").orderBy("startAt","asc").limit(300).onSnapshot(snap=>{
+    walks=snap.docs.map(d=>({id:d.id,...d.data()})).filter(w=>typeof w.startAt==="number"&&typeof w.duration==="number");
+    loaded=true; render();
+  },()=>{loaded=true;render()});
+  db.collection("joins").limit(1000).onSnapshot(snap=>{
+    joins=snap.docs.map(d=>({_id:d.id,...d.data()}));
+    render();
+  });
+  // who is online right now
+  c.use("room").then(r=>{
+    room=r; if(!r) return;
+    r.onPeers(async ch=>{
+      const peers=ch.peers;
+      const ids=[...new Set(peers.map(p=>p.by).filter(Boolean))];
+      const n=Math.max(ids.length,peers.length?1:0);
+      $("online").hidden=!n;
+      $("onlineText").textContent="онлайн: "+n;
+      const av=$("onlineAvs"); av.innerHTML="";
+      if(user&&ids.length){const ps=await user.profiles(ids);ids.slice(0,4).forEach(id=>{const im=document.createElement("img");im.alt="";im.title=ps[id]?.name||"";im.src=ps[id]?.avatarUrl||"";av.append(im)})}
+    });
+  });
+})();
+setInterval(render,60000);
+</script>
