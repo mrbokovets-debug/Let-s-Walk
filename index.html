@@ -107,6 +107,8 @@ button{cursor:pointer}
 .walk{background:var(--bg);border-radius:16px;display:grid;grid-template-columns:70px 1fr;overflow:hidden}
 .walk.sel{box-shadow:inset 0 0 0 2px var(--leaf)}
 .walk.mine .stub{background:var(--sun-soft)}
+.way{font-size:13px;color:var(--ink);font-variant-numeric:tabular-nums;display:flex;flex-direction:column;gap:2px}
+.leave{font-weight:600;color:var(--leaf)}
 .list-head{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:6px 2px 0}
 .walk.tap{cursor:pointer;transition:transform .12s,box-shadow .12s}
 .walk.tap:active{transform:scale(.985);box-shadow:inset 0 0 0 2px var(--leaf)}
@@ -528,7 +530,7 @@ function locate(fly){
     const icon=L.divIcon({className:"pin-wrap",iconSize:[0,0],html:'<div class="me"></div>'});
     if(meMarker) meMarker.setLatLng(myLoc); else meMarker=L.marker(myLoc,{icon,interactive:false}).addTo(map);
     if(fly) map.flyTo(myLoc,16,{duration:.8});
-    render();
+    watchMe(); render();
   },()=>{if(fly)toast("Не удалось определить место. Разреши доступ к геолокации в настройках браузера.")},{enableHighAccuracy:true,timeout:8000,maximumAge:60000});
 }
 $("locateBtn").onclick=()=>locate(true);
@@ -745,11 +747,26 @@ function card(w,byWalk,now){
   const place=document.createElement("div"); place.className="place"; place.textContent=w.place||"Точка на карте";
   const km=(w.duration/60*4.5).toFixed(1).replace(".",",");
   const steps=Math.round(w.duration*110/100)*100;
-  let distTxt="";
-  if(myLoc&&hasPt(w)){const m=L.latLng(myLoc).distanceTo([w.lat,w.lng]);distTxt=" · от тебя "+(m<1000?Math.round(m/10)*10+" м":(m/1000).toFixed(1).replace(".",",")+" км")}
   const meta=document.createElement("div"); meta.className="meta";
-  meta.textContent=w.duration+" мин · ≈ "+km+" км · ~"+steps.toLocaleString("ru-RU")+" шагов"+distTxt;
+  meta.textContent="Прогулка: "+w.duration+" мин · ≈ "+km+" км · ~"+steps.toLocaleString("ru-RU")+" шагов";
   b.append(top,place,meta);
+  if(myLoc&&hasPt(w)){
+    const way=document.createElement("div"); way.className="way";
+    const isSel=w.id===selectedId, r=isSel?routeFor(w):null;
+    if(r&&r.ok){
+      way.textContent="🚶 До встречи "+fmtDist(r.m)+" пешком · ~"+fmtMins(r.s/60);
+      const leave=w.startAt-r.s*1000-5*60000;
+      if(!statusOf(w,now).live&&leave>now&&leave-now<12*3600000){
+        const lv=document.createElement("div"); lv.className="leave";
+        lv.textContent=leave-now<10*60000?"Пора выходить, чтобы успеть к "+fmtTime(w.startAt):"Выходи в "+fmtTime(leave)+", чтобы прийти чуть заранее";
+        way.append(lv);
+      }
+    } else {
+      const m=L.latLng(myLoc).distanceTo([w.lat,w.lng]);
+      way.textContent="📍 До встречи "+fmtDist(m)+" по прямой"+(isSel&&r&&r.loading?" · считаем маршрут…":"");
+    }
+    b.append(way);
+  }
   if(w.note){const x=document.createElement("div");x.className="wnote";x.textContent=w.note;b.append(x)}
   if(Array.isArray(w.route)&&w.route.length){const ol=document.createElement("ol");ol.className="route";w.route.slice(0,6).forEach(s=>{const x=document.createElement("li");x.textContent=String(s);ol.append(x)});b.append(ol)}
   if(selectedId){const tk=document.createElement("div");tk.className="task";tk.textContent="Задание прогулки: "+TASKS[hashIdx(w.id,TASKS.length)];b.append(tk)}
@@ -796,6 +813,42 @@ function showNearbyWalks(){
   const sheetH=$("sheet").offsetHeight||140;
   map.fitBounds(L.latLngBounds(pts),{paddingTopLeft:[40,100],paddingBottomRight:[40,sheetH+40],maxZoom:16,animate:false});
 }
+
+// ---------- distance to the meeting point ----------
+const fmtDist=m=>m<1000?Math.max(10,Math.round(m/10)*10)+" м":(m/1000).toFixed(1).replace(".",",")+" км";
+const fmtMins=min=>{min=Math.max(1,Math.round(min));return min<60?min+" мин":Math.floor(min/60)+" ч"+(min%60?" "+min%60+" мин":"")};
+const routes={};
+// Real walking route along streets (OpenStreetMap foot routing); falls back to straight distance if unavailable
+function routeFor(w){
+  const key=w.id+"|"+myLoc[0].toFixed(3)+","+myLoc[1].toFixed(3)+"|"+w.lat.toFixed(5)+","+w.lng.toFixed(5);
+  if(routes[key]) return routes[key];
+  const r=routes[key]={loading:true};
+  const straight=L.latLng(myLoc).distanceTo([w.lat,w.lng]);
+  if(straight>40000){r.loading=false;return r}
+  fetch("https://routing.openstreetmap.de/routed-foot/route/v1/driving/"+myLoc[1]+","+myLoc[0]+";"+w.lng+","+w.lat+"?overview=false")
+    .then(x=>x.json()).then(j=>{
+      const rt=j&&j.routes&&j.routes[0];
+      if(rt&&isFinite(rt.distance)){r.ok=true;r.m=rt.distance;r.s=Math.max(rt.duration,rt.distance/1.25)}
+    }).catch(()=>{}).finally(()=>{r.loading=false;render()});
+  return r;
+}
+// Keep "where am I" fresh while the app is open
+let watchId=null,lastLocRender=0;
+function watchMe(){
+  if(!navigator.geolocation||watchId!==null) return;
+  watchId=navigator.geolocation.watchPosition(p=>{
+    const nl=[p.coords.latitude,p.coords.longitude];
+    const moved=!myLoc||L.latLng(myLoc).distanceTo(nl)>25;
+    myLoc=nl;
+    const icon=L.divIcon({className:"pin-wrap",iconSize:[0,0],html:'<div class="me"></div>'});
+    if(meMarker) meMarker.setLatLng(myLoc); else if(map) meMarker=L.marker(myLoc,{icon,interactive:false}).addTo(map);
+    if(moved&&Date.now()-lastLocRender>15000){lastLocRender=Date.now();render()}
+  },()=>{},{enableHighAccuracy:true,maximumAge:20000,timeout:20000});
+}
+document.addEventListener("visibilitychange",()=>{
+  if(document.hidden){if(watchId!==null){navigator.geolocation.clearWatch(watchId);watchId=null}}
+  else if(myLoc) watchMe();
+});
 
 // ---------- data (Supabase) ----------
 function errText(e){
@@ -1090,7 +1143,7 @@ function getStartCenter(){
     let done=false; const fin=c=>{if(!done){done=true;res(c)}};
     setTimeout(()=>fin(null),3500);
     if(!navigator.geolocation) return fin(null);
-    navigator.geolocation.getCurrentPosition(p=>{myLoc=[p.coords.latitude,p.coords.longitude];fin(myLoc)},()=>fin(null),{timeout:3500,maximumAge:300000});
+    navigator.geolocation.getCurrentPosition(p=>{myLoc=[p.coords.latitude,p.coords.longitude];fin(myLoc)},()=>fin(null),{timeout:3500,maximumAge:30000});
   });
 }
 (async()=>{
@@ -1099,7 +1152,7 @@ function getStartCenter(){
   const center=start||(saved&&saved.c)||DEFAULT_CENTER;
   initMap(center);
   map.on("moveend",()=>{try{const c=map.getCenter();localStorage.setItem("lw-view",JSON.stringify({c:[c.lat,c.lng]}))}catch(e){}});
-  if(myLoc) locate(false);
+  if(myLoc){locate(false);watchMe()}
   layoutSheet();
   if(!window.supabase){loaded=true;notice("Не удалось загрузить приложение. Проверь интернет и обнови страницу.");render();return}
   sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
