@@ -1,7 +1,7 @@
 // Let's Walk service worker.
 // Pages: network first (so updates arrive right away), cached copy when offline.
 // Own icons and manifest: cache first. Other sites (map tiles, Supabase, CDNs) are not touched.
-const CACHE = "lets-walk-v2";
+const CACHE = "lets-walk-v3";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./assets/logo/icon-192.png", "./assets/logo/icon-512.png"];
 
 self.addEventListener("install", e => {
@@ -49,6 +49,9 @@ self.addEventListener("push", e => {
     badge: "./assets/logo/icon-192.png",
     tag: m.tag || undefined,
     renotify: !!m.tag,
+    silent: false,
+    vibrate: [120, 60, 120],
+    timestamp: Date.now(),
     data: { url: m.url || "./" }
   }));
 });
