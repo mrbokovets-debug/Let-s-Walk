@@ -67,7 +67,7 @@
 
 1. Создать проект Supabase, таблицы и правила доступа из разделов 1–2.
 2. Вход по email или через Apple / Google.
-3. Заменить в `prototype/index.html` вызовы `claude.use(...)` на Supabase и выложить веб-версию (Vercel, Netlify или GitHub Pages).
+3. Заменить в `index.html` вызовы `claude.use(...)` на Supabase и выложить веб-версию (Vercel, Netlify или GitHub Pages).
 4. Edge Function для подсказки маршрута.
 5. Карта и геолокация: точка встречи, «кто гуляет рядом».
 6. Push-уведомления.

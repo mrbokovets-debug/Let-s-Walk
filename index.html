@@ -1,3 +1,12 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1E6B4E">
+<link rel="icon" type="image/png" sizes="192x192" href="assets/logo/icon-192.png">
+<link rel="apple-touch-icon" href="assets/logo/icon-180.png">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
 <title>Пошли гулять</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -123,6 +132,9 @@ textarea.input{resize:vertical;min-height:64px}
 @media (max-width:380px){.walk{grid-template-columns:64px 1fr}.stub .t{font-size:16px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
+</head>
+<body>
+
 
 <div class="app">
   <header class="top">
@@ -328,7 +340,7 @@ async function render(){
     const goers=[w.authorId,...(byWalk[w.id]||[]).filter(u=>u!==w.authorId)];
     const people=document.createElement("div"); people.className="people";
     const avs=document.createElement("span"); avs.className="avs";
-    goers.slice(0,6).forEach(u=>{const im=document.createElement("img");im.alt="";im.src=ps[u]?.avatarUrl||"";avs.append(im)});
+    goers.slice(0,6).forEach(u=>{if(!ps[u]?.avatarUrl)return;const im=document.createElement("img");im.alt="";im.src=ps[u].avatarUrl;avs.append(im)});
     const names=document.createElement("span"); names.className="names";
     const nm=u=>u===myId?"ты":(ps[u]?.name||"Кто-то");
     const author=nm(w.authorId);
@@ -474,10 +486,52 @@ $("aiBtn").onclick=async()=>{
   $("aiBtn").disabled=false;
 };
 
+// ---------- demo mode (opened outside Claude: data stays on this device) ----------
+let demo=false;
+const DEMO_PEOPLE={me:["Ты","#1E6B4E"],demo_anya:["Аня (пример)","#C2410C"],demo_misha:["Миша (пример)","#2563EB"]};
+function initialsAvatar(name,color){
+  const svg='<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="'+color+'"/><text x="32" y="42" font-size="28" font-family="sans-serif" font-weight="600" fill="#fff" text-anchor="middle">'+name.charAt(0)+'</text></svg>';
+  return "data:image/svg+xml;charset=utf-8,"+encodeURIComponent(svg);
+}
+function demoUser(){
+  return {profiles:async ids=>{const o={};(Array.isArray(ids)?ids:[ids]).forEach(id=>{const p=DEMO_PEOPLE[id]||["Кто-то","#5A6C63"];o[id]={id,name:p[0],avatarUrl:initialsAvatar(p[0],p[1])}});return o}};
+}
+function demoDb(){
+  const KEY="letswalk-demo-v1";
+  let state=null;
+  try{state=JSON.parse(localStorage.getItem(KEY)||"null")}catch(e){}
+  if(!state||!state.walks){
+    const now=Date.now(), t1=new Date(now+40*60000), t2=new Date(now+86400000);
+    t1.setMinutes(Math.ceil(t1.getMinutes()/15)*15,0,0); t2.setHours(10,0,0,0);
+    state={walks:{
+      demo1:{authorId:"demo_anya",place:"Парк у реки, главный вход",startAt:t1.getTime(),duration:45,mood:"С кофе",note:"Это пример. Нажми «Я с вами», чтобы попробовать.",createdAt:now},
+      demo2:{authorId:"demo_misha",place:"Набережная, у большого моста",startAt:t2.getTime(),duration:60,mood:"Активно",note:"Тоже пример: утренняя прогулка",route:["Мост: встречаемся","Вдоль воды до маяка","Кофе на обратном пути"],createdAt:now}
+    },joins:{}};
+  }
+  const subs={walks:[],joins:[]};
+  const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}};
+  const emit=c=>{const docs=Object.entries(state[c]).map(([id,d])=>({id,data:()=>d}));subs[c].forEach(f=>f({docs}))};
+  const coll=c=>{const q={
+    orderBy:()=>q,limit:()=>q,
+    onSnapshot:f=>{subs[c].push(f);setTimeout(()=>emit(c),0);return()=>{}},
+    add:async d=>{const id="w"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);state[c][id]=d;save();emit(c);return{id}},
+    doc:id=>({set:async d=>{state[c][id]=d;save();emit(c)},delete:async()=>{delete state[c][id];save();emit(c)}})
+  };return q};
+  return {collection:coll};
+}
+
 // ---------- boot ----------
 (async()=>{
   const c=window.claude;
-  if(!c||!c.use){loaded=true;db=null;applyWriteState();render();return}
+  if(!c||!c.use){
+    demo=true; db=demoDb(); user=demoUser(); myId="me"; canWrite=true;
+    $("aiBtn").hidden=true; $("aiHint").hidden=true;
+    const n=$("roNote"); n.hidden=false;
+    n.textContent="Демо-режим: прогулки сохраняются только на этом устройстве. Прогулки Ани и Миши — примеры, их можно удалить, очистив данные сайта.";
+    db.collection("walks").onSnapshot(s=>{walks=s.docs.map(d=>({id:d.id,...d.data()}));loaded=true;render()});
+    db.collection("joins").onSnapshot(s=>{joins=s.docs.map(d=>({_id:d.id,...d.data()}));render()});
+    return;
+  }
   [db,user]=await Promise.all([c.use("db"),c.use("user")]);
   c.use("sample").then(s=>{sample=s;if(!s){$("aiBtn").hidden=true;$("aiHint").hidden=true}});
   if(user){myId=await user.id();canWrite=await user.can("data.write")}
@@ -507,3 +561,6 @@ $("aiBtn").onclick=async()=>{
 })();
 setInterval(render,60000);
 </script>
+
+</body>
+</html>
