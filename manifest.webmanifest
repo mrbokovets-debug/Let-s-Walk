@@ -1,0 +1,20 @@
+{
+  "name": "Let's Walk — пошли гулять",
+  "short_name": "Let's Walk",
+  "description": "Смотри на карте, кто зовёт прогуляться рядом, и присоединяйся.",
+  "lang": "ru",
+  "start_url": "./",
+  "scope": "./",
+  "id": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#EAF0EC",
+  "theme_color": "#1E6B4E",
+  "categories": ["social", "lifestyle", "health"],
+  "icons": [
+    { "src": "assets/logo/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/logo/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/logo/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "assets/logo/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

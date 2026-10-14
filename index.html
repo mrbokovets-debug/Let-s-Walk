@@ -15,6 +15,12 @@
 <meta name="twitter:card" content="summary">
 <link rel="icon" type="image/png" sizes="192x192" href="assets/logo/icon-192.png">
 <link rel="apple-touch-icon" href="assets/logo/icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Let's Walk">
+<meta name="application-name" content="Let's Walk">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -181,6 +187,13 @@ textarea.input{resize:vertical;min-height:60px}
 
 .toast{position:fixed;z-index:1000;left:50%;transform:translateX(-50%);top:calc(70px + var(--sat));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-size:14px;max-width:calc(100% - 32px);text-align:center}
 .top-right{display:flex;gap:8px}
+.install{position:fixed;z-index:700;left:var(--gl);right:var(--gr);top:calc(66px + var(--sat));max-width:520px;background:var(--surface);border-radius:16px;box-shadow:var(--shadow);padding:12px 40px 12px 12px;display:flex;gap:12px;align-items:center}
+.install img{width:48px;height:48px;border-radius:12px;flex:none}
+.install .txt{display:flex;flex-direction:column;gap:2px;min-width:0;font-size:13px;color:var(--muted)}
+.install .txt b{font-size:15px;color:var(--ink)}
+.install .x{position:absolute;right:4px;top:4px;width:32px;height:32px;border:0;background:transparent;color:var(--muted);font-size:20px;line-height:1}
+.install .primary{flex:none;padding:10px 14px}
+.ios-share{display:inline-block;vertical-align:-3px}
 .avatar-btn{width:46px;height:46px;border-radius:50%;border:3px solid var(--surface);box-shadow:var(--shadow);padding:0;overflow:hidden;background:var(--surface);display:grid;place-items:center;color:var(--ink)}
 .avatar-btn img{width:100%;height:100%;display:block}
 .tabs{display:flex;background:var(--bg);border-radius:999px;padding:4px;gap:4px}
@@ -212,6 +225,13 @@ textarea.input{resize:vertical;min-height:60px}
     </button>
   </div>
 </header>
+
+<div class="install" id="install" hidden role="dialog" aria-label="Установить приложение">
+  <img src="assets/logo/icon-192.png" alt="">
+  <div class="txt"><b>Установи Let's Walk</b><span id="installText">Будет открываться с экрана телефона, как обычное приложение.</span></div>
+  <button class="primary" type="button" id="installBtn" hidden>Установить</button>
+  <button class="x" type="button" id="installX" aria-label="Не сейчас">×</button>
+</div>
 
 <div class="notice" id="notice" hidden><span id="noticeText"></span><button class="x" id="noticeX" type="button" aria-label="Скрыть">×</button></div>
 
@@ -923,6 +943,39 @@ function getStartCenter(){
   openFromHash();
   subscribeLive();
   document.addEventListener("visibilitychange",()=>{if(!document.hidden)reload()});
+})();
+// ---------- install as an app ----------
+(function(){
+  const standalone=window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;
+  if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
+  if(standalone) return;
+  let dismissed=0; try{dismissed=+localStorage.getItem("lw-install-dismissed")||0}catch(e){}
+  if(Date.now()-dismissed<7*86400000) return;
+  const bar=$("install"), hide=()=>{bar.hidden=true;try{localStorage.setItem("lw-install-dismissed",String(Date.now()))}catch(e){}};
+  $("installX").onclick=hide;
+  const ua=navigator.userAgent;
+  const ios=/iphone|ipad|ipod/i.test(ua)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
+  const inApp=/FBAN|FBAV|Instagram|Line\/|Telegram|WhatsApp/i.test(ua);
+  if(ios){
+    $("installText").innerHTML='Нажми <svg class="ios-share" width="16" height="18" viewBox="0 0 16 20" aria-label="Поделиться"><path d="M8 1v11M4 5l4-4 4 4M2 9v9h12V9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg> «Поделиться» внизу Safari, затем «На экран Домой».';
+    if(inApp) $("installText").textContent="Открой эту ссылку в Safari, затем «Поделиться» → «На экран Домой».";
+    setTimeout(()=>{bar.hidden=false},4000);
+    return;
+  }
+  let deferred=null;
+  window.addEventListener("beforeinstallprompt",e=>{
+    e.preventDefault(); deferred=e;
+    $("installBtn").hidden=false; $("installText").textContent="Иконка на экране, запуск без адресной строки.";
+    setTimeout(()=>{bar.hidden=false},2500);
+  });
+  $("installBtn").onclick=async()=>{
+    if(!deferred) return;
+    deferred.prompt();
+    const r=await deferred.userChoice.catch(()=>null); deferred=null;
+    bar.hidden=true;
+    if(r&&r.outcome==="accepted") toast("Готово! Let's Walk теперь на экране телефона.");
+  };
+  window.addEventListener("appinstalled",()=>{bar.hidden=true});
 })();
 setInterval(render,60000);
 setInterval(()=>{if(!document.hidden)reload()},120000);
