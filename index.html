@@ -124,7 +124,14 @@ button{cursor:pointer}
 .meta{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
 .wnote{font-size:14px;overflow-wrap:anywhere}
 .route{margin:0;padding-left:18px;font-size:13px;color:var(--muted)}
-.task{font-size:13px;border-left:3px solid var(--sun);padding:1px 0 1px 9px}
+.task{background:var(--sun-soft);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.task .tt{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.task .tx{font-size:15px;font-weight:600;line-height:1.35}
+.task .tact{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.task .done-btn{border:0;border-radius:999px;padding:8px 14px;font-weight:600;background:var(--leaf);color:var(--leaf-ink)}
+.task .done{font-size:14px;font-weight:600;color:var(--leaf)}
+.task .hint{font-size:13px;color:var(--muted)}
+.task.is-done .tx{text-decoration:line-through;text-decoration-thickness:2px;opacity:.75}
 .people{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .avs{display:flex}
 .avs img{width:26px;height:26px;border-radius:50%;border:2px solid var(--bg);margin-left:-7px;background:var(--line)}
@@ -420,7 +427,31 @@ const SUPABASE_URL="https://fweicomizgndbxdoxovn.supabase.co";
 const SUPABASE_KEY="sb_publishable_HxyXsedm-XbWopI29uDB2w_PZydosts";
 
 const MOODS=["Спокойно","Активно","С кофе","К воде","С собакой","Фото-прогулка"];
-const TASKS=["Найдите самую старую дверь на пути","Сфотографируйте что-нибудь жёлтое","Пройдите улицей, где ещё ни разу не были","Найдите место с лучшим видом и постойте там минуту","Посчитайте всех встреченных собак","Найдите самое необычное дерево","Сделайте общее фото на фоне заката или фонаря","Купите что-нибудь у уличного продавца"];
+// Walk tasks: a few for every mood plus general ones
+const TASKS_ANY=[
+  "Найдите самую старую дверь на пути",
+  "Сфотографируйте что-нибудь жёлтое",
+  "Пройдите улицей, где ни один из вас ещё не был",
+  "Найдите место с лучшим видом и постойте там минуту молча",
+  "Найдите самое необычное дерево и придумайте ему имя",
+  "Сделайте общее фото на фоне заката или фонаря",
+  "Найдите надпись или граффити, которое вам понравится",
+  "Каждый расскажет одну вещь, которую другие о нём не знают",
+  "Найдите что-нибудь в форме сердца",
+  "Поверните три раза подряд туда, куда скажет самый младший",
+  "Найдите скамейку с самым красивым видом и посидите пять минут",
+  "Сосчитайте всех встреченных велосипедистов"
+];
+const TASKS_BY_MOOD={
+  "Спокойно":["Пройдите десять минут не торопясь и без телефонов","Найдите самое тихое место по пути","Послушайте птиц и попробуйте сосчитать, сколько разных голосов слышно","Найдите место, где пахнет чем-то вкусным или цветами","Сделайте кадр, который передаёт спокойствие"],
+  "Активно":["Пройдите отрезок быстрым шагом наперегонки","Найдите лестницу и поднимитесь по ней","Наберите вместе 5 000 шагов","Сделайте общее фото в прыжке","Поднимитесь на самую высокую точку рядом"],
+  "С кофе":["Найдите кафе, где никто из вас ещё не был","Попробуйте напиток, который никогда не заказывали","Оцените кофе по шкале от 1 до 10 и выберите победителя","Найдите самую уютную террасу по пути","Сфотографируйте свои стаканчики вместе"],
+  "К воде":["Найдите самое красивое место у воды","Сделайте фото отражения в воде","Найдите камень необычной формы","Посчитайте лодки, корабли или яхты, которые увидите","Дождитесь волны и успейте сделать снимок"],
+  "С собакой":["Познакомьтесь с другой собакой и её хозяином","Найдите площадку, где собаке понравится больше всего","Сделайте фото, где собака смотрит прямо в камеру","Научите собаку чему-то новому или просто похвалите её пять раз","Найдите воду, где собака сможет попить"],
+  "Фото-прогулка":["Сделайте снимок с необычного ракурса: снизу или сверху","Найдите и снимите что-нибудь красное, синее и зелёное","Сделайте портрет друг друга на фоне стены с текстурой","Сфотографируйте тень, которая похожа на что-то другое","Снимите одну и ту же сцену каждый по-своему и сравните"]
+};
+function tasksFor(w){return (TASKS_BY_MOOD[w.mood]||[]).concat(TASKS_ANY)}
+function taskOf(w){const list=tasksFor(w);return list[(hashIdx(w.id,997)+(w.taskSeed||0))%list.length]}
 const DEFAULT_CENTER=[39.4699,-0.3763];
 const $=id=>document.getElementById(id);
 
@@ -739,7 +770,7 @@ function card(w,byWalk,now){
   b.append(top,place);
   if(w.note){const x=document.createElement("div");x.className="wnote";x.textContent=w.note;b.append(x)}
   if(Array.isArray(w.route)&&w.route.length){const ol=document.createElement("ol");ol.className="route";w.route.slice(0,6).forEach(s=>{const x=document.createElement("li");x.textContent=String(s);ol.append(x)});b.append(ol)}
-  if(selectedId){const tk=document.createElement("div");tk.className="task";tk.textContent="Задание прогулки: "+TASKS[hashIdx(w.id,TASKS.length)];b.append(tk)}
+  if(selectedId) b.append(taskBlock(w,byWalk,now));
   const goers=[w.authorId,...(byWalk[w.id]||[]).filter(u=>u!==w.authorId)];
   const people=document.createElement("div"); people.className="people";
   const avs=document.createElement("span"); avs.className="avs";
@@ -803,6 +834,48 @@ document.addEventListener("visibilitychange",()=>{
   else if(myLoc) watchMe();
 });
 
+// ---------- walk task ----------
+function taskBlock(w,byWalk,now){
+  const member=!!myId&&(w.authorId===myId||(byWalk[w.id]||[]).includes(myId));
+  const box=document.createElement("div"); box.className="task"+(w.taskDoneAt?" is-done":"");
+  const tt=document.createElement("div"); tt.className="tt"; tt.textContent="🎯 Задание прогулки";
+  const tx=document.createElement("div"); tx.className="tx"; tx.textContent=taskOf(w);
+  const act=document.createElement("div"); act.className="tact";
+  if(w.taskDoneAt){
+    const d=document.createElement("span"); d.className="done";
+    d.textContent="✅ Выполнено"+(w.taskDoneBy?(w.taskDoneBy===myId?" · отметил(а) ты":" · отметил(а) "+(names[w.taskDoneBy]||"участник")):"");
+    act.append(d);
+  } else if(member){
+    const ok=document.createElement("button"); ok.type="button"; ok.className="done-btn"; ok.textContent="Выполнили! ✅";
+    ok.onclick=()=>markTaskDone(w,ok); act.append(ok);
+  } else {
+    const h=document.createElement("span"); h.className="hint"; h.textContent="Присоединяйся, чтобы выполнить его вместе";
+    act.append(h);
+  }
+  if(w.authorId===myId&&!w.taskDoneAt){
+    const nx=document.createElement("button"); nx.type="button"; nx.className="small"; nx.textContent="🎲 Другое задание";
+    nx.onclick=()=>nextTask(w,nx); act.append(nx);
+  }
+  box.append(tt,tx,act); return box;
+}
+async function nextTask(w,btn){
+  btn.disabled=true;
+  const {error}=await sb.from("walks").update({task_seed:(w.taskSeed||0)+1}).eq("id",w.id).eq("author_id",myId);
+  btn.disabled=false;
+  if(error){toast(/task_seed/.test(error.message||"")?"Задания ещё не включены в базе. Запусти 04_tasks.sql.":errText(error));return}
+  w.taskSeed=(w.taskSeed||0)+1; render();
+}
+async function markTaskDone(w,btn){
+  btn.disabled=true;
+  const task=taskOf(w);
+  const {error}=await sb.rpc("mark_task_done",{w:w.id});
+  btn.disabled=false;
+  if(error){toast(/mark_task_done|function/.test(error.message||"")?"Задания ещё не включены в базе. Запусти 04_tasks.sql.":errText(error));return}
+  try{await sb.from("walk_messages").insert({walk_id:w.id,user_id:myId,body:("✅ Задание выполнено: «"+task+"»").slice(0,500)})}catch(e){}
+  w.taskDoneAt=Date.now(); w.taskDoneBy=myId; render(); toast("Отлично! Задание выполнено 🎉");
+  reload();
+}
+
 // ---------- data (Supabase) ----------
 function errText(e){
   const m=(e&&(e.message||e.error_description))||"";
@@ -819,7 +892,7 @@ async function reload(){
     const since=new Date(Date.now()-3*3600000).toISOString();
     const {data:ws,error:e1}=await sb.from("walks").select("*").gte("start_at",since).order("start_at").limit(500);
     if(e1) throw e1;
-    walks=(ws||[]).map(r=>({id:r.id,authorId:r.author_id,place:r.place,lat:r.lat,lng:r.lng,startAt:Date.parse(r.start_at),duration:r.duration_min,mood:r.mood,note:r.note,route:r.route,hidden:!!r.hidden}));
+    walks=(ws||[]).map(r=>({id:r.id,authorId:r.author_id,place:r.place,lat:r.lat,lng:r.lng,startAt:Date.parse(r.start_at),duration:r.duration_min,mood:r.mood,note:r.note,route:r.route,hidden:!!r.hidden,taskSeed:r.task_seed||0,taskDoneAt:r.task_done_at?Date.parse(r.task_done_at):null,taskDoneBy:r.task_done_by||null}));
     const ids=walks.map(w=>w.id);
     joins=[];
     if(ids.length){
