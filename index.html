@@ -152,6 +152,17 @@ textarea.input{resize:vertical;min-height:60px}
 .safety{font-size:12px;color:var(--muted)}
 
 .toast{position:fixed;z-index:1000;left:50%;transform:translateX(-50%);top:calc(70px + var(--sat));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-size:14px;max-width:calc(100% - 32px);text-align:center}
+.top-right{display:flex;gap:8px}
+.avatar-btn{width:46px;height:46px;border-radius:50%;border:3px solid var(--surface);box-shadow:var(--shadow);padding:0;overflow:hidden;background:var(--surface);display:grid;place-items:center;color:var(--ink)}
+.avatar-btn img{width:100%;height:100%;display:block}
+.tabs{display:flex;background:var(--bg);border-radius:999px;padding:4px;gap:4px}
+.tab{flex:1;border:0;background:transparent;border-radius:999px;padding:10px;font-weight:600;color:var(--muted)}
+.tab[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.lead{margin:0;color:var(--muted);font-size:14px}
+.me-card{display:flex;align-items:center;gap:12px}
+.me-card img{width:52px;height:52px;border-radius:50%}
+.me-card .nm{font-weight:600;font-size:17px}
+.me-card .em{font-size:13px;color:var(--muted);overflow-wrap:anywhere}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -164,9 +175,14 @@ textarea.input{resize:vertical;min-height:60px}
     Let's Walk
     <span class="online" id="online" hidden><span class="dot"></span><span id="onlineText"></span></span>
   </div>
-  <button class="round" id="locateBtn" type="button" aria-label="Показать, где я">
-    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-  </button>
+  <div class="top-right">
+    <button class="round" id="locateBtn" type="button" aria-label="Показать, где я">
+      <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+    <button class="avatar-btn" id="meBtn" type="button" aria-label="Войти">
+      <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+  </div>
 </header>
 
 <div class="notice" id="notice" hidden><span id="noticeText"></span><button class="x" id="noticeX" type="button" aria-label="Скрыть">×</button></div>
@@ -232,10 +248,6 @@ textarea.input{resize:vertical;min-height:60px}
       <label class="label" for="wnote">Пара слов (необязательно)</label>
       <textarea class="input" id="wnote" maxlength="140" placeholder="Возьму термос с чаем. Кто со мной?"></textarea>
     </div>
-    <div class="row" id="aiRow">
-      <button class="ghost" type="button" id="aiBtn">Подсказать маршрут</button>
-    </div>
-    <div class="ai-box" id="aiBox" hidden></div>
     <div class="err" id="formErr" hidden></div>
     <div class="row">
       <button class="primary" type="submit" id="publishBtn">Позвать гулять</button>
@@ -245,27 +257,77 @@ textarea.input{resize:vertical;min-height:60px}
   </form>
 </div>
 
+<div class="modal" id="authModal" hidden>
+  <form class="form" id="authForm" novalidate>
+    <h2 id="authTitle">Вход</h2>
+    <p class="lead" id="authLead">Войди, чтобы звать гулять и присоединяться к прогулкам.</p>
+    <div class="tabs" role="tablist">
+      <button class="tab" type="button" role="tab" id="tabIn" aria-selected="true">Вход</button>
+      <button class="tab" type="button" role="tab" id="tabUp" aria-selected="false">Регистрация</button>
+    </div>
+    <div class="field" id="nameField" hidden>
+      <label class="label" for="authName">Как тебя зовут</label>
+      <input class="input" id="authName" maxlength="40" autocomplete="given-name" placeholder="Например: Саша">
+    </div>
+    <div class="field">
+      <label class="label" for="authEmail">Email</label>
+      <input class="input" id="authEmail" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com">
+    </div>
+    <div class="field">
+      <label class="label" for="authPass">Пароль</label>
+      <input class="input" id="authPass" type="password" autocomplete="current-password" minlength="6" placeholder="Минимум 6 символов">
+    </div>
+    <div class="err" id="authErr" hidden></div>
+    <div class="row">
+      <button class="primary" type="submit" id="authSubmit">Войти</button>
+      <button class="ghost" type="button" id="authClose">Отмена</button>
+    </div>
+  </form>
+</div>
+
+<div class="modal" id="meModal" hidden>
+  <form class="form" id="meForm" novalidate>
+    <div class="me-card"><img id="meAvatar" alt=""><div><div class="nm" id="meName"></div><div class="em" id="meEmail"></div></div></div>
+    <div class="field">
+      <label class="label" for="newName">Имя</label>
+      <input class="input" id="newName" maxlength="40" autocomplete="given-name">
+    </div>
+    <div class="err" id="meErr" hidden></div>
+    <div class="row">
+      <button class="primary" type="submit" id="meSave">Сохранить имя</button>
+      <button class="ghost" type="button" id="meClose">Закрыть</button>
+    </div>
+    <div class="row"><button class="cancel" type="button" id="signOut">Выйти из аккаунта</button></div>
+  </form>
+</div>
+
 <div class="toast" id="toast" hidden></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script>
+// ---------- config (public values: data is protected by the database rules) ----------
+const SUPABASE_URL="https://fweicomizgndbxdoxovn.supabase.co";
+const SUPABASE_KEY="sb_publishable_HxyXsedm-XbWopI29uDB2w_PZydosts";
+
 const MOODS=["Спокойно","Активно","С кофе","К воде","С собакой","Фото-прогулка"];
 const TASKS=["Найдите самую старую дверь на пути","Сфотографируйте что-нибудь жёлтое","Пройдите улицей, где ещё ни разу не были","Найдите место с лучшим видом и постойте там минуту","Посчитайте всех встреченных собак","Найдите самое необычное дерево","Сделайте общее фото на фоне заката или фонаря","Купите что-нибудь у уличного продавца"];
 const DEFAULT_CENTER=[39.4699,-0.3763];
 const $=id=>document.getElementById(id);
 
-let db=null,user=null,sample=null,myId=null,canWrite=null,demo=false;
-let walks=[],joins=[],loaded=false,aiRoute=null;
+let sb=null,session=null,myId=null,myName="";
+let walks=[],joins=[],loaded=false;
+const names={};
 let map=null,pickMarker=null,pick=null,meMarker=null,myLoc=null;
 const markers={};
-let selectedId=null,expanded=false;
+let selectedId=null,expanded=false,afterAuth=null;
 const confirming=new Set();
 
 // ---------- helpers ----------
 MOODS.forEach((m,i)=>{const l=document.createElement("label");l.className="chip";const inp=document.createElement("input");inp.type="radio";inp.name="mood";inp.value=m;inp.id="mood"+i;if(!i)inp.checked=true;const sp=document.createElement("span");sp.textContent=m;l.append(inp,sp);$("moodChips").append(l)});
-function toast(m){const t=$("toast");t.textContent=m;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,2600)}
+function toast(m){const t=$("toast");t.textContent=m;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,3000)}
 function notice(m){$("noticeText").textContent=m;$("notice").hidden=!m}
-$("noticeX").onclick=()=>{$("notice").hidden=true;try{localStorage.setItem("lw-notice-closed","1")}catch(e){}};
+$("noticeX").onclick=()=>{$("notice").hidden=true};
 const pad=n=>String(n).padStart(2,"0");
 const fmtTime=ms=>{const d=new Date(ms);return pad(d.getHours())+":"+pad(d.getMinutes())};
 const WD=["вс","пн","вт","ср","чт","пт","сб"];
@@ -292,12 +354,19 @@ function statusOf(w,now){const end=w.startAt+w.duration*60000;if(now>=w.startAt&
 function hashIdx(s,n){let h=0;for(const c of s)h=(h*31+c.charCodeAt(0))>>>0;return h%n}
 function defaultTime(){const d=new Date(Date.now()+30*60000);d.setMinutes(Math.ceil(d.getMinutes()/15)*15,0,0);return pad(d.getHours())+":"+pad(d.getMinutes())}
 const hasPt=w=>typeof w.lat==="number"&&typeof w.lng==="number";
+const COLORS=["#1E6B4E","#C2410C","#2563EB","#7C3AED","#B45309","#0F766E","#BE185D","#4D7C0F"];
+function avatarFor(id,name){
+  const color=COLORS[hashIdx(id||"x",COLORS.length)], ch=(name||"?").trim().charAt(0).toUpperCase()||"?";
+  const svg='<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="'+color+'"/><text x="32" y="42" font-size="28" font-family="sans-serif" font-weight="600" fill="#fff" text-anchor="middle">'+ch.replace(/[<&>"]/g,"")+'</text></svg>';
+  return"data:image/svg+xml;charset=utf-8,"+encodeURIComponent(svg);
+}
+const nameOf=id=>id===myId?"ты":(names[id]||"Кто-то");
 
 // ---------- map ----------
 function initMap(center){
   map=L.map("map",{zoomControl:false,attributionControl:true}).setView(center,15);
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(map);
-  map.on("click",e=>setPick(e.latlng));
+  map.on("click",e=>{if(!requireAuth(()=>setPick(e.latlng),"Войди, чтобы позвать гулять"))return;setPick(e.latlng)});
 }
 const pickIcon=L.divIcon({className:"pin-wrap",iconSize:[0,0],html:'<div class="pick"><svg width="36" height="46" viewBox="0 0 36 46"><path d="M18 45s15-13.5 15-26A15 15 0 0 0 3 19c0 12.5 15 26 15 26z" fill="#F3C24B" stroke="#16261F" stroke-width="2.5"/><circle cx="18" cy="18" r="5.5" fill="#16261F"/></svg></div>'});
 function setPick(latlng){
@@ -307,7 +376,6 @@ function setPick(latlng){
     pickMarker.on("dragend",()=>{const p=pickMarker.getLatLng();pick={lat:p.lat,lng:p.lng,label:""};lookupAddr()});
   } else pickMarker.setLatLng(latlng);
   selectedId=null; expanded=false;
-  $("pickAddr").textContent="Ищем адрес…";
   lookupAddr(); layoutSheet(); render();
 }
 function clearPick(){if(pickMarker){map.removeLayer(pickMarker);pickMarker=null}pick=null;layoutSheet()}
@@ -325,7 +393,7 @@ async function lookupAddr(){
     if(!label) label=a.park||a.neighbourhood||a.suburb||"";
   }catch(e){}
   if(seq!==addrSeq||!pick) return;
-  pick.label=label;
+  pick.label=label.slice(0,90);
   $("pickAddr").textContent=label||"Точка на карте";
 }
 function pinIcon(w,count,live,mine,sel){
@@ -340,6 +408,7 @@ function locate(fly){
     const icon=L.divIcon({className:"pin-wrap",iconSize:[0,0],html:'<div class="me"></div>'});
     if(meMarker) meMarker.setLatLng(myLoc); else meMarker=L.marker(myLoc,{icon,interactive:false}).addTo(map);
     if(fly) map.flyTo(myLoc,16,{duration:.8});
+    render();
   },()=>{if(fly)toast("Не удалось определить место. Разреши доступ к геолокации в настройках браузера.")},{enableHighAccuracy:true,timeout:8000,maximumAge:60000});
 }
 $("locateBtn").onclick=()=>locate(true);
@@ -357,48 +426,40 @@ function toggleSheet(){if(pick)return;if(selectedId){selectedId=null;expanded=tr
 $("handle").onclick=toggleSheet; $("titleBtn").onclick=toggleSheet;
 $("backAll").onclick=()=>{selectedId=null;expanded=true;layoutSheet();render()};
 $("goBtn").onclick=()=>{
-  if(canWrite===false||!myId){toast("Сейчас можно только смотреть прогулки");return}
-  const c=myLoc&&map.getBounds().contains(myLoc)?L.latLng(myLoc):map.getCenter();
-  setPick(c); toast("Выбери место встречи на карте");
+  const go=()=>{const c=myLoc&&map.getBounds().contains(myLoc)?L.latLng(myLoc):map.getCenter();setPick(c);toast("Выбери место встречи на карте")};
+  if(requireAuth(go,"Войди, чтобы позвать гулять")) go();
 };
 $("pickCancel").onclick=()=>{clearPick();render()};
 $("pickGo").onclick=openForm;
 
 // ---------- render ----------
-let renderSeq=0;
 async function render(){
-  const seq=++renderSeq, now=Date.now();
+  const now=Date.now();
   const upcoming=walks.filter(w=>w.startAt+w.duration*60000>now).sort((a,b)=>a.startAt-b.startAt);
   const byWalk={}; joins.forEach(j=>{(byWalk[j.walkId]=byWalk[j.walkId]||[]).push(j.userId)});
-  const ids=new Set(); upcoming.forEach(w=>{ids.add(w.authorId);(byWalk[w.id]||[]).forEach(u=>ids.add(u))});
-  let ps={}; if(user&&ids.size){try{ps=await user.profiles([...ids])}catch(e){}}
-  if(seq!==renderSeq) return;
   if(selectedId&&!upcoming.some(w=>w.id===selectedId)) selectedId=null;
 
-  // header
   const n=upcoming.length, liveN=upcoming.filter(w=>statusOf(w,now).live).length;
   $("countTitle").textContent=!loaded?"Загружаем…":n?n+" "+plural(n,"прогулка","прогулки","прогулок"):"Пока никто не зовёт";
   $("countSub").textContent=liveN?liveN+" "+plural(liveN,"идёт","идут","идут")+" прямо сейчас":n?"Нажми, чтобы открыть список":"Нажми на карту, чтобы выбрать место встречи";
 
-  // markers
   if(map){
     const keep=new Set();
     upcoming.filter(hasPt).forEach(w=>{
       keep.add(w.id);
       const goers=1+(byWalk[w.id]||[]).filter(u=>u!==w.authorId).length;
       const icon=pinIcon(w,goers,statusOf(w,now).live,w.authorId===myId,w.id===selectedId);
-      if(markers[w.id]){markers[w.id].setLatLng([w.lat,w.lng]).setIcon(icon)}
-      else{markers[w.id]=L.marker([w.lat,w.lng],{icon,riseOnHover:true}).addTo(map).on("click",ev=>{L.DomEvent.stopPropagation(ev);openDetail(w.id)})}
+      if(markers[w.id]) markers[w.id].setLatLng([w.lat,w.lng]).setIcon(icon);
+      else markers[w.id]=L.marker([w.lat,w.lng],{icon,riseOnHover:true}).addTo(map).on("click",ev=>{L.DomEvent.stopPropagation(ev);openDetail(w.id)});
       markers[w.id].setZIndexOffset(w.id===selectedId?900:0);
     });
     Object.keys(markers).forEach(id=>{if(!keep.has(id)){map.removeLayer(markers[id]);delete markers[id]}});
   }
 
-  // list
   const list=$("list"); list.innerHTML="";
   const shown=selectedId?upcoming.filter(w=>w.id===selectedId):upcoming;
   $("empty").hidden=!!shown.length||!loaded;
-  shown.forEach(w=>list.append(card(w,ps,byWalk,now)));
+  shown.forEach(w=>list.append(card(w,byWalk,now)));
   layoutSheet();
 }
 function openDetail(id){
@@ -406,7 +467,7 @@ function openDetail(id){
   const w=walks.find(x=>x.id===id);
   if(w&&hasPt(w)) map.panTo([w.lat,w.lng],{animate:true});
 }
-function card(w,ps,byWalk,now){
+function card(w,byWalk,now){
   const st=statusOf(w,now);
   const li=document.createElement("li"); li.className="walk"+(w.id===selectedId?" sel":"");
   const stub=document.createElement("div"); stub.className="stub";
@@ -420,9 +481,9 @@ function card(w,ps,byWalk,now){
   const place=document.createElement("div"); place.className="place"; place.textContent=w.place||"Точка на карте";
   const km=(w.duration/60*4.5).toFixed(1).replace(".",",");
   const steps=Math.round(w.duration*110/100)*100;
-  const meta=document.createElement("div"); meta.className="meta";
   let distTxt="";
   if(myLoc&&hasPt(w)){const m=L.latLng(myLoc).distanceTo([w.lat,w.lng]);distTxt=" · от тебя "+(m<1000?Math.round(m/10)*10+" м":(m/1000).toFixed(1).replace(".",",")+" км")}
+  const meta=document.createElement("div"); meta.className="meta";
   meta.textContent=w.duration+" мин · ≈ "+km+" км · ~"+steps.toLocaleString("ru-RU")+" шагов"+distTxt;
   b.append(top,place,meta);
   if(w.note){const x=document.createElement("div");x.className="wnote";x.textContent=w.note;b.append(x)}
@@ -431,15 +492,14 @@ function card(w,ps,byWalk,now){
   const goers=[w.authorId,...(byWalk[w.id]||[]).filter(u=>u!==w.authorId)];
   const people=document.createElement("div"); people.className="people";
   const avs=document.createElement("span"); avs.className="avs";
-  goers.slice(0,6).forEach(u=>{if(!ps[u]?.avatarUrl)return;const im=document.createElement("img");im.alt="";im.src=ps[u].avatarUrl;avs.append(im)});
-  const nm=u=>u===myId?"ты":(ps[u]?.name||"Кто-то");
-  const names=document.createElement("span"); names.className="names";
+  goers.slice(0,6).forEach(u=>{const im=document.createElement("img");im.alt="";im.src=avatarFor(u,u===myId?myName:names[u]);avs.append(im)});
+  const names_=document.createElement("span"); names_.className="names";
   const others=goers.slice(1);
-  names.textContent=(w.authorId===myId?"Ты зовёшь":nm(w.authorId)+" зовёт")+(others.length?" · идут: "+others.map(nm).join(", "):" · пока без компании");
-  people.append(avs,names); b.append(people);
+  names_.textContent=(w.authorId===myId?"Ты зовёшь":nameOf(w.authorId)+" зовёт")+(others.length?" · идут: "+others.map(nameOf).join(", "):" · пока без компании");
+  people.append(avs,names_); b.append(people);
   const act=document.createElement("div"); act.className="wact";
-  const iJoined=(byWalk[w.id]||[]).includes(myId);
-  if(myId&&w.authorId!==myId&&canWrite!==false){const j=document.createElement("button");j.type="button";j.className="join"+(iJoined?" on":"");j.textContent=iJoined?"Я не смогу":"Я с вами";j.onclick=()=>toggleJoin(w,iJoined,j);act.append(j)}
+  const iJoined=!!myId&&(byWalk[w.id]||[]).includes(myId);
+  if(w.authorId!==myId){const j=document.createElement("button");j.type="button";j.className="join"+(iJoined?" on":"");j.textContent=iJoined?"Я не смогу":"Я с вами";j.onclick=()=>{if(requireAuth(null,"Войди, чтобы присоединиться"))toggleJoin(w,iJoined,j)};act.append(j)}
   if(!selectedId&&hasPt(w)){const s=document.createElement("button");s.type="button";s.className="small";s.textContent="На карте";s.onclick=()=>{openDetail(w.id);map.flyTo([w.lat,w.lng],16,{duration:.6})};act.append(s)}
   if(myId&&w.authorId===myId){
     const conf=confirming.has(w.id);
@@ -450,27 +510,70 @@ function card(w,ps,byWalk,now){
   li.append(stub,b); return li;
 }
 
-// ---------- actions ----------
+// ---------- data (Supabase) ----------
+function errText(e){
+  const m=(e&&(e.message||e.error_description))||"";
+  if(/Failed to fetch|NetworkError|Load failed/i.test(m)) return "Нет связи с сервером. Проверь интернет.";
+  if(/JWT|not authenticated|permission|row-level/i.test(m)) return "Нужно войти заново.";
+  return m||"Что-то пошло не так. Попробуй ещё раз.";
+}
+let loading=false,reloadAgain=false;
+async function reload(){
+  if(!sb) return;
+  if(loading){reloadAgain=true;return}
+  loading=true;
+  try{
+    const since=new Date(Date.now()-3*3600000).toISOString();
+    const {data:ws,error:e1}=await sb.from("walks").select("id,author_id,place,lat,lng,start_at,duration_min,mood,note,route").gte("start_at",since).order("start_at").limit(500);
+    if(e1) throw e1;
+    walks=(ws||[]).map(r=>({id:r.id,authorId:r.author_id,place:r.place,lat:r.lat,lng:r.lng,startAt:Date.parse(r.start_at),duration:r.duration_min,mood:r.mood,note:r.note,route:r.route}));
+    const ids=walks.map(w=>w.id);
+    joins=[];
+    if(ids.length){
+      const {data:js,error:e2}=await sb.from("walk_participants").select("walk_id,user_id").in("walk_id",ids);
+      if(e2) throw e2;
+      joins=(js||[]).map(r=>({walkId:r.walk_id,userId:r.user_id}));
+    }
+    const need=[...new Set([...walks.map(w=>w.authorId),...joins.map(j=>j.userId)])].filter(id=>!(id in names));
+    if(need.length){
+      const {data:ps}=await sb.from("profiles").select("id,name").in("id",need);
+      (ps||[]).forEach(p=>names[p.id]=p.name);
+      need.forEach(id=>{if(!(id in names))names[id]=""});
+    }
+    loaded=true;
+  }catch(e){loaded=true;toast(errText(e))}
+  loading=false;
+  render();
+  if(reloadAgain){reloadAgain=false;reload()}
+}
+let rlTimer=null;
+const reloadSoon=()=>{clearTimeout(rlTimer);rlTimer=setTimeout(reload,250)};
+function subscribeLive(){
+  const ch=sb.channel("lets-walk-live",{config:{presence:{key:myId||("guest-"+Math.random().toString(36).slice(2,9))}}});
+  ch.on("postgres_changes",{event:"*",schema:"public",table:"walks"},reloadSoon)
+    .on("postgres_changes",{event:"*",schema:"public",table:"walk_participants"},reloadSoon)
+    .on("presence",{event:"sync"},()=>{const n=Object.keys(ch.presenceState()).length;$("online").hidden=!n;$("onlineText").textContent="онлайн "+n})
+    .subscribe(s=>{if(s==="SUBSCRIBED") ch.track({at:Date.now()})});
+}
 async function toggleJoin(w,iJoined,btn){
-  if(!db||!myId) return; btn.disabled=true;
-  const ref=db.collection("joins").doc(w.id+"~"+myId);
-  try{if(iJoined){await ref.delete();toast("Ты больше не идёшь")}else{await ref.set({walkId:w.id,userId:myId,at:Date.now()});toast("Отлично, ты идёшь гулять!")}}catch(e){writeErr(e)}
+  btn.disabled=true;
+  try{
+    if(iJoined){const {error}=await sb.from("walk_participants").delete().eq("walk_id",w.id).eq("user_id",myId);if(error)throw error;toast("Ты больше не идёшь")}
+    else{const {error}=await sb.from("walk_participants").insert({walk_id:w.id,user_id:myId});if(error&&error.code!=="23505")throw error;toast("Отлично, ты идёшь гулять!")}
+    await reload();
+  }catch(e){toast(errText(e))}
   btn.disabled=false;
 }
 async function cancelWalk(w){
   if(!confirming.has(w.id)){confirming.add(w.id);render();return}
   confirming.delete(w.id);
-  try{await db.collection("walks").doc(w.id).delete();for(const j of joins.filter(j=>j.walkId===w.id)){try{await db.collection("joins").doc(j._id).delete()}catch(e){}}selectedId=null;toast("Прогулка отменена")}catch(e){writeErr(e)}
-}
-function writeErr(e){
-  if(e&&e.code==="invalid_argument"){canWrite=false;toast("Не получилось: у тебя доступ только на просмотр")}
-  else if(e&&e.code==="quota_exceeded") toast("Место для прогулок закончилось");
-  else toast("Не получилось сохранить. Попробуй ещё раз.");
+  try{const {error}=await sb.from("walks").delete().eq("id",w.id);if(error)throw error;selectedId=null;toast("Прогулка отменена");await reload()}catch(e){toast(errText(e))}
 }
 
-// ---------- form ----------
+// ---------- create walk ----------
 function openForm(){
   if(!pick) return;
+  if(!requireAuth(openForm,"Войди, чтобы позвать гулять")) return;
   buildDays(true);
   $("modal").hidden=false;
   if(!$("time").value) $("time").value=defaultTime();
@@ -493,58 +596,97 @@ $("walkForm").addEventListener("submit",async ev=>{
   if(!f.place){showErr("Напиши, где встречаемся.");$("place").focus();return}
   if(!f.startAt){showErr("Укажи время.");$("time").focus();return}
   if(f.startAt+f.duration*60000<Date.now()){showErr("Это время уже прошло. Выбери время позже или другой день.");return}
-  if(!db||!myId){showErr("Сохранение сейчас недоступно.");return}
+  if(!myId){showErr("Сначала войди.");return}
   const btn=$("publishBtn"); btn.disabled=true;
   try{
-    const doc={authorId:myId,place:f.place,lat:pick.lat,lng:pick.lng,startAt:f.startAt,duration:f.duration,mood:f.mood,note:f.note,createdAt:Date.now()};
-    if(aiRoute&&aiRoute.length) doc.route=aiRoute;
-    const ref=await db.collection("walks").add(doc);
+    const {data,error}=await sb.from("walks").insert({author_id:myId,place:f.place,lat:pick.lat,lng:pick.lng,start_at:new Date(f.startAt).toISOString(),duration_min:f.duration,mood:f.mood||null,note:f.note||null}).select("id").single();
+    if(error) throw error;
     $("walkForm").reset(); buildDays(false); $("dur45").checked=true; $("mood0").checked=true; $("time").value="";
-    aiRoute=null; $("aiBox").hidden=true; closeForm(); clearPick();
-    if(ref&&ref.id){selectedId=ref.id}
-    render(); toast("Готово! Твоя прогулка на карте.");
-  }catch(e){writeErr(e)}
+    closeForm(); clearPick();
+    if(data&&data.id) selectedId=data.id;
+    await reload(); toast("Готово! Твоя прогулка на карте.");
+  }catch(e){showErr(errText(e))}
   btn.disabled=false;
 });
-$("aiBtn").onclick=async()=>{
-  const f=readForm(),box=$("aiBox");
-  if(!f.place){showErr("Сначала напиши, где встречаемся.");return}
-  if(!sample) return;
-  box.hidden=false; box.textContent="Claude придумывает маршрут…"; $("aiBtn").disabled=true;
-  try{
-    const r=await sample.json("Спланируй пешую прогулку. Старт: «"+f.place+"». Длительность: "+f.duration+" минут. Настроение: "+f.mood+". Предложи 3–5 точек, подходящих по времени (около 4,5 км/ч). Пиши по-русски, коротко. Ответь ТОЛЬКО JSON: {\"title\":\"…\",\"stops\":[\"…\"],\"tip\":\"…\"}",{modelTier:"quick"});
-    const stops=Array.isArray(r?.stops)?r.stops.map(s=>String(s).slice(0,120)).slice(0,5):[];
-    box.innerHTML=""; const h=document.createElement("h3"); h.textContent=String(r?.title||"Маршрут").slice(0,80);
-    const ol=document.createElement("ol"); stops.forEach(s=>{const li=document.createElement("li");li.textContent=s;ol.append(li)});
-    const use=document.createElement("button"); use.type="button"; use.className="primary"; use.textContent="Добавить маршрут"; use.onclick=()=>{aiRoute=stops;use.textContent="Маршрут добавлен";use.disabled=true};
-    box.append(h,ol,use);
-  }catch(e){box.textContent=e?.code==="not_granted"?"Без разрешения Claude не может подсказать маршрут.":"Не получилось придумать маршрут. Попробуй ещё раз."}
-  $("aiBtn").disabled=false;
-};
 
-// ---------- demo mode (outside Claude: data stays on this device) ----------
-const DEMO_PEOPLE={me:["Ты","#1E6B4E"],demo_anya:["Аня (пример)","#C2410C"],demo_misha:["Миша (пример)","#2563EB"]};
-function initialsAvatar(name,color){const svg='<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="'+color+'"/><text x="32" y="42" font-size="28" font-family="sans-serif" font-weight="600" fill="#fff" text-anchor="middle">'+name.charAt(0)+'</text></svg>';return"data:image/svg+xml;charset=utf-8,"+encodeURIComponent(svg)}
-function demoUser(){return{profiles:async ids=>{const o={};(Array.isArray(ids)?ids:[ids]).forEach(id=>{const p=DEMO_PEOPLE[id]||["Кто-то","#5A6C63"];o[id]={id,name:p[0],avatarUrl:initialsAvatar(p[0],p[1])}});return o}}}
-function demoDb(center){
-  const KEY="letswalk-demo-v2"; let state=null;
-  try{state=JSON.parse(localStorage.getItem(KEY)||"null")}catch(e){}
-  if(!state||!state.walks){
-    const now=Date.now(),t1=new Date(now+40*60000),t2=new Date(now+86400000);
-    t1.setMinutes(Math.ceil(t1.getMinutes()/15)*15,0,0); t2.setHours(10,0,0,0);
-    state={walks:{
-      demo1:{authorId:"demo_anya",place:"Здесь рядом (пример)",lat:center[0]+0.0035,lng:center[1]+0.004,startAt:t1.getTime(),duration:45,mood:"С кофе",note:"Это пример. Нажми «Я с вами», чтобы попробовать.",createdAt:now},
-      demo2:{authorId:"demo_misha",place:"Чуть дальше (пример)",lat:center[0]-0.004,lng:center[1]-0.005,startAt:t2.getTime(),duration:60,mood:"Активно",note:"Тоже пример: утренняя прогулка",route:["Встречаемся здесь","Кружок по парку","Кофе на обратном пути"],createdAt:now}
-    },joins:{}};
-  }
-  const subs={walks:[],joins:[]};
-  const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}};
-  const emit=c=>{const docs=Object.entries(state[c]).map(([id,d])=>({id,data:()=>d}));subs[c].forEach(f=>f({docs}))};
-  const coll=c=>{const q={orderBy:()=>q,limit:()=>q,onSnapshot:f=>{subs[c].push(f);setTimeout(()=>emit(c),0);return()=>{}},
-    add:async d=>{const id="w"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);state[c][id]=d;save();emit(c);return{id}},
-    doc:id=>({set:async d=>{state[c][id]=d;save();emit(c)},delete:async()=>{delete state[c][id];save();emit(c)}})};return q};
-  save(); return{collection:coll};
+// ---------- auth ----------
+let authMode="in";
+function setAuthMode(m){
+  authMode=m;
+  $("tabIn").setAttribute("aria-selected",String(m==="in")); $("tabUp").setAttribute("aria-selected",String(m==="up"));
+  $("nameField").hidden=m!=="up";
+  $("authTitle").textContent=m==="up"?"Регистрация":"Вход";
+  $("authSubmit").textContent=m==="up"?"Зарегистрироваться":"Войти";
+  $("authPass").autocomplete=m==="up"?"new-password":"current-password";
+  authErr("");
 }
+$("tabIn").onclick=()=>setAuthMode("in"); $("tabUp").onclick=()=>setAuthMode("up");
+function authErr(m){$("authErr").textContent=m;$("authErr").hidden=!m}
+function openAuth(lead){
+  $("authLead").textContent=lead||"Войди, чтобы звать гулять и присоединяться к прогулкам.";
+  setAuthMode(authMode); $("authModal").hidden=false;
+}
+function closeAuth(){$("authModal").hidden=true;afterAuth=null}
+$("authClose").onclick=closeAuth;
+$("authModal").addEventListener("click",e=>{if(e.target===$("authModal"))closeAuth()});
+function requireAuth(then,lead){if(myId)return true;afterAuth=then;openAuth(lead);return false}
+$("authForm").addEventListener("submit",async ev=>{
+  ev.preventDefault();
+  const email=$("authEmail").value.trim(), pass=$("authPass").value, name=$("authName").value.trim();
+  if(!/^\S+@\S+\.\S+$/.test(email)){authErr("Проверь email.");return}
+  if(pass.length<6){authErr("Пароль должен быть не короче 6 символов.");return}
+  if(authMode==="up"&&!name){authErr("Напиши, как тебя зовут.");return}
+  const btn=$("authSubmit"); btn.disabled=true; authErr("");
+  try{
+    let res;
+    if(authMode==="up") res=await sb.auth.signUp({email,password:pass,options:{data:{name}}});
+    else res=await sb.auth.signInWithPassword({email,password:pass});
+    if(res.error) throw res.error;
+    if(!res.data.session){authErr("Аккаунт создан, но нужно подтвердить email. Проверь почту.");btn.disabled=false;return}
+    await applySession(res.data.session);
+    const next=afterAuth; $("authModal").hidden=true; afterAuth=null; $("authPass").value="";
+    toast(authMode==="up"?"Добро пожаловать, "+(myName||name)+"!":"С возвращением, "+(myName||"друг")+"!");
+    if(next) next(); else render();
+  }catch(e){
+    const m=(e&&e.message)||"";
+    if(/Invalid login credentials/i.test(m)) authErr("Неверный email или пароль.");
+    else if(/already registered|already exists/i.test(m)) authErr("Такой email уже зарегистрирован. Перейди на вкладку «Вход».");
+    else if(/rate limit/i.test(m)) authErr("Слишком много попыток. Подожди немного.");
+    else authErr(errText(e));
+  }
+  btn.disabled=false;
+});
+async function applySession(s){
+  session=s; myId=s?s.user.id:null; myName="";
+  if(myId){
+    const {data}=await sb.from("profiles").select("name").eq("id",myId).maybeSingle();
+    myName=(data&&data.name)||s.user.user_metadata?.name||"";
+    names[myId]=myName;
+  }
+  paintMe(); render();
+}
+function paintMe(){
+  const b=$("meBtn");
+  if(myId){b.innerHTML="";const im=document.createElement("img");im.alt="";im.src=avatarFor(myId,myName);b.append(im);b.setAttribute("aria-label","Мой профиль")}
+  else{b.innerHTML='<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';b.setAttribute("aria-label","Войти")}
+}
+$("meBtn").onclick=()=>{
+  if(!myId){openAuth();return}
+  $("meAvatar").src=avatarFor(myId,myName); $("meName").textContent=myName||"Без имени"; $("meEmail").textContent=session?.user?.email||"";
+  $("newName").value=myName; $("meErr").hidden=true; $("meModal").hidden=false;
+};
+$("meClose").onclick=()=>$("meModal").hidden=true;
+$("meModal").addEventListener("click",e=>{if(e.target===$("meModal"))$("meModal").hidden=true});
+$("meForm").addEventListener("submit",async ev=>{
+  ev.preventDefault(); const n=$("newName").value.trim();
+  if(!n){$("meErr").textContent="Имя не может быть пустым.";$("meErr").hidden=false;return}
+  $("meSave").disabled=true;
+  const {error}=await sb.from("profiles").update({name:n}).eq("id",myId);
+  $("meSave").disabled=false;
+  if(error){$("meErr").textContent=errText(error);$("meErr").hidden=false;return}
+  myName=n; names[myId]=n; paintMe(); $("meModal").hidden=true; toast("Имя сохранено"); render();
+});
+$("signOut").onclick=async()=>{await sb.auth.signOut();$("meModal").hidden=true;clearPick();await applySession(null);toast("Ты вышел из аккаунта")};
 
 // ---------- boot ----------
 function getStartCenter(){
@@ -555,10 +697,6 @@ function getStartCenter(){
     navigator.geolocation.getCurrentPosition(p=>{myLoc=[p.coords.latitude,p.coords.longitude];fin(myLoc)},()=>fin(null),{timeout:3500,maximumAge:300000});
   });
 }
-function subscribe(){
-  db.collection("walks").orderBy("startAt","asc").limit(300).onSnapshot(s=>{walks=s.docs.map(d=>({id:d.id,...d.data()})).filter(w=>typeof w.startAt==="number"&&typeof w.duration==="number");loaded=true;render()},()=>{loaded=true;render()});
-  db.collection("joins").limit(1000).onSnapshot(s=>{joins=s.docs.map(d=>({_id:d.id,...d.data()}));render()});
-}
 (async()=>{
   const start=await getStartCenter();
   let saved=null; try{saved=JSON.parse(localStorage.getItem("lw-view")||"null")}catch(e){}
@@ -567,23 +705,17 @@ function subscribe(){
   map.on("moveend",()=>{try{const c=map.getCenter();localStorage.setItem("lw-view",JSON.stringify({c:[c.lat,c.lng]}))}catch(e){}});
   if(myLoc) locate(false);
   layoutSheet();
-  const c=window.claude;
-  if(!c||!c.use){
-    demo=true; db=demoDb(center); user=demoUser(); myId="me"; canWrite=true;
-    $("aiRow").hidden=true;
-    let closed=false; try{closed=localStorage.getItem("lw-notice-closed")==="1"}catch(e){}
-    if(!closed) notice("Демо-режим: прогулки сохраняются только на этом телефоне. Аня и Миша — примеры.");
-    subscribe(); return;
-  }
-  [db,user]=await Promise.all([c.use("db"),c.use("user")]);
-  c.use("sample").then(s=>{sample=s;$("aiRow").hidden=!s});
-  if(user){myId=await user.id();canWrite=await user.can("data.write")}
-  if(!db){loaded=true;notice("Войди в аккаунт Claude, чтобы видеть прогулки друзей.");render();return}
-  if(canWrite===false||!myId) notice("Ты можешь смотреть прогулки, но не создавать их.");
-  subscribe();
-  c.use("room").then(r=>{if(!r)return;r.onPeers(ch=>{const n=new Set(ch.peers.map(p=>p.by||p.peer)).size;$("online").hidden=!n;$("onlineText").textContent="онлайн "+n})});
+  if(!window.supabase){loaded=true;notice("Не удалось загрузить приложение. Проверь интернет и обнови страницу.");render();return}
+  sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
+  const {data:{session:s}}=await sb.auth.getSession();
+  await applySession(s);
+  sb.auth.onAuthStateChange((evt,s2)=>{if(evt==="TOKEN_REFRESHED")session=s2});
+  await reload();
+  subscribeLive();
+  document.addEventListener("visibilitychange",()=>{if(!document.hidden)reload()});
 })();
 setInterval(render,60000);
+setInterval(()=>{if(!document.hidden)reload()},120000);
 </script>
 </body>
 </html>
